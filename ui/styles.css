@@ -395,3 +395,29 @@ body.has-bottom-nav .foot { display: none; }
 .cat { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (min-width: 761px) { .cat { grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 14px; } }
 .prod-price { flex-wrap: wrap; }
+
+/* Social buttons: round icon buttons with a glowing disc behind them on hover/focus.
+   Adapted from Diego Lopes's "Glowing Icon Hover Effect" (CodePen WLVGda), using
+   this site's accent instead of yellow, inline SVG icons, and keyboard focus support. */
+.social li { position: relative; isolation: isolate; }
+.social { display: flex; gap: 14px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
+.social a {
+  --sc: var(--accent, #8B5CF6);
+  position: relative; display: grid; place-items: center;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--surface-2, #221C2E); color: var(--muted, #A59DB5); border: 1px solid var(--line, rgb(255 255 255 / .08));
+  transition: color .5s, box-shadow .5s, background-color .5s;
+}
+.social a::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%;
+  background: var(--sc); transform: scale(.9); transition: transform .5s, box-shadow .5s;
+}
+.social a:hover, .social a:focus-visible {
+  color: var(--sc); background: var(--bg, #0E0B14);
+  box-shadow: 0 0 6px var(--sc);
+}
+.social a:hover::before, .social a:focus-visible::before { transform: scale(1.1); box-shadow: 0 0 16px var(--sc); }
+.social a:focus-visible { outline: 2px solid var(--sc); outline-offset: 5px; }
+.social svg { width: 22px; height: 22px; fill: currentColor; filter: drop-shadow(0 0 0 transparent); transition: filter .5s; }
+.social a:hover svg, .social a:focus-visible svg { filter: drop-shadow(0 0 5px var(--sc)); }
+@media (prefers-reduced-motion: reduce) { .social a, .social a::before, .social svg { transition: none; } }
