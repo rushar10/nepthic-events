@@ -1,0 +1,71 @@
+/* Nepthic custom cursor — visuals. Pair with cursor/engine.ts (or nepthic-cursor.js).
+   The engine moves layers with translate3d() and writes two colour variables:
+     --nc-rgb       ring + dot colour ("r g b")
+     --nc-spot-rgb  ambient light colour ("r g b")                                   */
+
+/* The native cursor is hidden only inside the scope, and only while the engine runs
+   (it adds .nc-on to <html> on fine pointers). Inputs and [data-cursor-native] keep it. */
+.nc-on [data-nc-scope], .nc-on [data-nc-scope] * { cursor: none; }
+.nc-on [data-nc-scope] :is(input, textarea, select, [contenteditable=""], [contenteditable="true"]) { cursor: auto; }
+.nc-on [data-nc-scope] :is(input[type="checkbox"], input[type="radio"], input[type="submit"], input[type="button"], select) { cursor: pointer; }
+.nc-on [data-nc-scope] [data-cursor-native], .nc-on [data-nc-scope] [data-cursor-native] * { cursor: auto; }
+.nc-on [data-nc-scope] [data-cursor-native] :is(a, button, label) { cursor: pointer; }
+
+.nc-layer {
+  --nc-rgb: 239 236 244;
+  position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;
+  opacity: 1; transition: opacity .25s ease;
+}
+.nc-layer.is-out { opacity: 0; }
+
+.nc-dot, .nc-ring { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
+
+.nc-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: rgb(var(--nc-rgb));
+  box-shadow: 0 0 12px rgb(var(--nc-rgb) / .55);
+}
+
+/* Drawn at hover size (80px) and scaled down to 40px at rest, so size changes are transform-only. */
+.nc-ring {
+  width: var(--nc-hover, 80px); height: var(--nc-hover, 80px); border-radius: 50%;
+  display: grid; place-items: center;
+  border: 2px solid rgb(var(--nc-rgb) / .8);
+  box-shadow: 0 0 22px rgb(var(--nc-rgb) / .25), inset 0 0 18px rgb(var(--nc-rgb) / .12);
+  transform-origin: 50% 50%;
+  transition: border-color .2s ease;
+}
+.nc-ring-fill { position: absolute; inset: 0; border-radius: 50%; background: rgb(var(--nc-rgb) / .16); opacity: 0; transition: opacity .2s ease; }
+.nc-label {
+  position: relative; transform: translateY(17px);
+  font: 700 11px/1 var(--nc-font, system-ui, -apple-system, "Segoe UI", sans-serif); letter-spacing: .02em;
+  color: #fff; text-shadow: 0 1px 6px rgb(0 0 0 / .45);
+  opacity: 0; transition: opacity .18s ease;
+}
+.nc-pulse { position: absolute; inset: -2px; border-radius: 50%; border: 2px solid rgb(var(--nc-rgb)); opacity: 0; }
+
+/* Over a target: bigger (via the engine), semi-transparent, with a label. */
+.nc-layer.is-hover .nc-ring { border-color: rgb(var(--nc-rgb) / .5); }
+.nc-layer.is-hover .nc-ring-fill, .nc-layer.is-hover .nc-label { opacity: 1; }
+
+/* Click: the engine shrinks the ring; this ripple pulses outward. */
+.nc-ring.is-pulse .nc-pulse { animation: nc-pulse .45s cubic-bezier(.2, .7, .3, 1); }
+@keyframes nc-pulse { from { opacity: .75; transform: scale(1); } to { opacity: 0; transform: scale(1.75); } }
+
+/* Ambient light behind the content (z-index -1 inside the page's stacking context). */
+.nc-spot {
+  --nc-spot-rgb: 143 167 255;
+  position: fixed; left: 0; top: 0; z-index: -1; pointer-events: none; border-radius: 50%;
+  width: var(--nc-spot, 520px); height: var(--nc-spot, 520px);
+  background: radial-gradient(closest-side, rgb(var(--nc-spot-rgb) / .2), rgb(var(--nc-spot-rgb) / .07) 50%, transparent);
+  will-change: transform; opacity: 1; transition: opacity .35s ease;
+}
+.nc-spot.is-out { opacity: 0; }
+
+/* Reduced motion: just the dot, exactly at the pointer. */
+.nc-reduced .nc-ring, .nc-reduced .nc-spot { display: none; }
+
+/* Optional: fade the page while a link waits for the press animation. */
+.nc-leaving [data-nc-scope] { transition: opacity .18s ease; opacity: .85; }
+
+@media (hover: none), (pointer: coarse) { .nc-layer, .nc-spot { display: none; } }

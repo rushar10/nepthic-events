@@ -1,0 +1,88 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Nepthic proximity glow — visuals.
+   The engine (engine.ts / nepthic-glow.js) only writes numbers:
+     --glow-intensity 0..1   distance-eased strength (border light + faint tint)
+     --glow-fill      0..1   1 while the cursor is directly on the element
+     --glow-x / -y    px     cursor position inside the element
+     --glow-u         0..1   0 = warm side (--glow-a) … 1 = cool side (--glow-b)
+   Everything below is pure CSS: two pseudo-elements painted under the content,
+   so text keeps its normal colour and contrast at full glow.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Default: Nepthic violet → magenta. light-dark() follows each theme's color-scheme. */
+  --glow-a: light-dark(#7C3AED, #A78BFA);
+  --glow-b: light-dark(#BE185D, #EC4899);
+  --glow-tint: 11%;          /* surface tint strength at full fill */
+  --glow-ring: 1.5px;        /* border light thickness */
+  --glow-size: 320px;        /* spotlight diameter; the engine derives it from the radius */
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --glow-tint: 18%; } }
+:root[data-theme="dark"] { --glow-tint: 18%; }
+
+/* One effect, one accent pair per site: the site's own accent → Nepthic violet. */
+.site-clo { --glow-a: light-dark(#B45309, #F5A524); --glow-b: light-dark(#7C3AED, #A78BFA); } /* Clothing: amber → violet */
+.site-ws  { --glow-a: light-dark(#0F766E, #2DD4BF); --glow-b: light-dark(#7C3AED, #A78BFA); } /* Wholesale: teal → violet */
+.site-ev  { --glow-a: light-dark(#BE185D, #EC4899); --glow-b: light-dark(#7C3AED, #A78BFA); } /* Events: magenta → violet */
+.site-hub { --glow-a: light-dark(#7C3AED, #A78BFA); --glow-b: light-dark(#BE185D, #EC4899); } /* Gateway: violet → magenta */
+.site-adm { --glow-a: light-dark(#4F46E5, #818CF8); --glow-b: light-dark(#0891B2, #22D3EE); } /* Admin: indigo → cyan, used at reduced strength */
+
+:where([data-glow], .prox) {
+  --glow-intensity: 0;
+  --glow-fill: 0;
+  --glow-focus: 0;
+  --glow-u: .5;
+  --glow-x: 50%;
+  --glow-y: 50%;
+  --glow-color: color-mix(in oklch, var(--glow-a) calc((1 - var(--glow-u)) * 100%), var(--glow-b));
+  position: relative;
+  isolation: isolate;        /* keeps the glow layers above the background, below the content */
+}
+
+:where([data-glow], .prox)::before,
+:where([data-glow], .prox)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Surface: a soft tint that pours in from the cursor side; fills when hovered directly. */
+:where([data-glow], .prox)::before {
+  background: radial-gradient(calc(var(--glow-size) * 1.15) circle at var(--glow-x) var(--glow-y),
+    color-mix(in oklch, var(--glow-color) var(--glow-tint), transparent), transparent 72%);
+  opacity: max(var(--glow-fill), calc(var(--glow-intensity) * .22), calc(var(--glow-focus) * .6));
+}
+
+/* Border: lights up first as the cursor approaches. A masked ring, so no layout changes.
+   It sits above the content (it is only the 1.5px edge) so images and art can't hide it. */
+:where([data-glow], .prox)::after {
+  z-index: 2;
+  padding: var(--glow-ring);
+  background: radial-gradient(var(--glow-size) circle at var(--glow-x) var(--glow-y), var(--glow-color), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: max(var(--glow-intensity), var(--glow-focus));
+}
+
+/* Keyboard focus gets the full glow, evenly around the whole element. */
+:where([data-glow], .prox):focus-visible,
+:where([data-glow], .prox):has(:focus-visible) {
+  --glow-focus: 1;
+  --glow-x: 50% !important;   /* beats the engine's inline cursor position */
+  --glow-y: 50% !important;
+  --glow-size: 260% !important;
+}
+
+/* Reduced motion (or mode "static"): no tracking, a simple still highlight on hover and focus. */
+:root[data-glow-mode="static"] :where([data-glow], .prox) { --glow-x: 50%; --glow-y: 50%; --glow-size: 260%; }
+:root[data-glow-mode="static"] :where([data-glow], .prox):hover { --glow-focus: .85; }
+@media (prefers-reduced-motion: reduce) {
+  :where([data-glow], .prox) { --glow-x: 50%; --glow-y: 50%; --glow-size: 260%; }
+  :where([data-glow], .prox):hover { --glow-focus: .85; }
+}
+:root[data-glow-mode="off"] :where([data-glow], .prox)::before,
+:root[data-glow-mode="off"] :where([data-glow], .prox)::after { display: none; }
