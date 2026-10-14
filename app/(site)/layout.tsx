@@ -5,6 +5,7 @@ import "@/ui/ux/ux.css";
 import "@/ui/ux/ux-site.css";
 import type { Metadata, Viewport } from "next";
 import { SiteHeader, Footer } from "@/ui/SiteHeader";
+import { PreviewBar } from "@/ui/PreviewBar";
 import { Proximity } from "@/ui/Proximity";
 import { Reveal } from "@/ui/Reveal";
 import { BottomNav, RegisterSW } from "@/ui/Mobile";
@@ -37,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en-AU" data-theme={theme ?? undefined}>
       <body className="site-ev has-bottom-nav">
+        <PreviewBar />
         <SiteHeader
           siteName="Events"
           logoHref={env.logoHref}

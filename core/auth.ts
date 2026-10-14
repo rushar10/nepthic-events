@@ -68,6 +68,5 @@ export async function loginWithPassword(email: string, password: string) {
   return user;
 }
 
-export const STAFF_ROLES: Role[] = ["STAFF", "ADMIN"];
-export const DOOR_ROLES: Role[] = ["DOOR", "STAFF", "ADMIN"];
-export const isAdmin = (u: { role: Role } | null | undefined) => u?.role === "ADMIN";
+/* Every account on this site is a customer. Nepthic staff (including door staff) use the
+   separate Admin Portal, which has its own accounts; there is no staff login here. */

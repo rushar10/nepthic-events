@@ -10,12 +10,12 @@ function secret(name: string, devFallback: string) {
 }
 
 export const env = {
+  /** The Nepthic Admin Portal (server-side only: team alert emails and the admin preview bar). */
+  portalUrl: (process.env.PORTAL_URL ?? "").replace(/\/$/, ""),
   /** This site's own address (emails, Stripe redirects, wallet passes). */
   siteUrl: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3002").replace(/\/$/, ""),
   /** Where the Nepthic logo points: "/" (this site's home) unless set to the gateway. */
   logoHref: process.env.NEXT_PUBLIC_LOGO_HREF || "/",
-  /** Read-only summary API for the Nepthic Overview dashboard; empty = endpoint off. */
-  overviewToken: process.env.OVERVIEW_API_TOKEN ?? "",
   paymentsMode: ((process.env.PAYMENTS_MODE as "mock" | "stripe" | undefined) ??
     (process.env.STRIPE_SECRET_KEY ? "stripe" : "mock")) as "mock" | "stripe",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",

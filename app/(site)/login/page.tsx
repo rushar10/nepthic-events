@@ -5,8 +5,8 @@ import { Field } from "@/ui/ux/Field";
 
 export const metadata = { title: "Sign in" };
 
-export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string; denied?: string }> }) {
-  const { next, denied } = await searchParams;
+export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { next } = await searchParams;
   return (
     <div className="auth stack">
       <div className="hero" style={{ paddingBottom: 0 }}>
@@ -14,7 +14,6 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
         <h1 className="page">Sign in</h1>
         <p className="dim">Your Nepthic Events account holds your tickets and orders. It&apos;s separate from the Nepthic store and Wholesale.</p>
       </div>
-      {denied && <p className="note warn">Door staff now sign in on the Nepthic Door app.</p>}
       <ActionForm action={login} className="panel prox">
         <input type="hidden" name="next" value={next ?? "/tickets"} />
         <Field label="Email" type="email" name="email" autoComplete="username" inputMode="email" autoCapitalize="none" spellCheck={false} required />

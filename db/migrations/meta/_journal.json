@@ -15,6 +15,13 @@
       "when": 1791975654214,
       "tag": "0001_saved_items",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792005695847,
+      "tag": "0002_admin_portal",
+      "breakpoints": true
     }
   ]
 }

@@ -17,14 +17,12 @@ import { haptic } from "./haptics";
 
 type VTDoc = Document & { startViewTransition?: (cb: () => Promise<void> | void) => { finished: Promise<void> } };
 
-const area = (p: string) => (p.startsWith("/admin") ? "admin" : p.startsWith("/door") ? "door" : "site");
 
 function internalHref(a: HTMLAnchorElement): URL | null {
   if (!a.href || a.target && a.target !== "_self" || a.hasAttribute("download") || a.dataset.native !== undefined) return null;
   const url = new URL(a.href, location.href);
   if (url.origin !== location.origin) return null;
   if (url.pathname.startsWith("/api/") || /\.[a-z0-9]{2,5}$/i.test(url.pathname)) return null;
-  if (area(url.pathname) !== area(location.pathname)) return null;      // different root layout: full load
   if (url.pathname === location.pathname && url.search === location.search && url.hash) return null; // in-page anchor
   return url;
 }

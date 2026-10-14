@@ -2,7 +2,7 @@
    writes it. Money is stored in integer cents (AUD). */
 import { randomUUID } from "node:crypto";
 import { relations, sql } from "drizzle-orm";
-import { boolean, customType, index, integer, jsonb, pgEnum, pgTable, real, serial, text, timestamp, primaryKey } from "drizzle-orm/pg-core";
+import { boolean, check, customType, index, integer, jsonb, pgEnum, pgTable, real, serial, text, timestamp, primaryKey } from "drizzle-orm/pg-core";
 
 const id = () => text("id").primaryKey().$defaultFn(() => randomUUID());
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -10,6 +10,8 @@ const ts = (name: string) => timestamp(name, { withTimezone: true });
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 
 /* CUSTOMER buys tickets; DOOR scans at the venue; STAFF runs events; ADMIN also approves refunds and changes settings. */
+/* Kept for compatibility; only CUSTOMER is allowed (check constraint on users). Staff, door
+   staff and admins have no accounts on this site: they use the Nepthic Admin Portal. */
 export const role = pgEnum("role", ["CUSTOMER", "DOOR", "STAFF", "ADMIN"]);
 export const paymentKind = pgEnum("payment_kind", ["TICKET", "REFUND"]);
 export const paymentStatus = pgEnum("payment_status", ["PENDING", "SUCCEEDED", "FAILED"]);
@@ -29,7 +31,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: role("role").notNull().default("CUSTOMER"),
   createdAt: createdAt(),
-});
+}, () => [check("users_customers_only", sql`role = 'CUSTOMER'`)]);
 
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(), // sha256 of the cookie token
@@ -188,3 +190,16 @@ export const savedItems = pgTable("saved_items", {
   itemId: text("item_id").notNull().references(() => events.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.userId, t.itemId] })]);
+
+/* Admin preview sessions. A Nepthic Admin Portal user who clicks "View live site" gets one of
+   these (30 minutes), created from a one-time token signed by the portal. While it's valid the
+   site shows them the admin preview bar. Customers never get one; only a hash of the cookie is stored. */
+export const adminPreviews = pgTable("admin_previews", {
+  id: text("id").primaryKey(),
+  adminId: text("admin_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  role: text("role").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+});

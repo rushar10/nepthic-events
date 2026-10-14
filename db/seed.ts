@@ -23,13 +23,9 @@ async function user(email: string, name: string, role: Role, password: string) {
 async function main() {
   await db.insert(settings).values({ id: 1 }).onConflictDoNothing();
 
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD || "change-me-now";
-  await user(process.env.SEED_ADMIN_EMAIL || "admin@events.nepthic.com", "Events Admin", "ADMIN", adminPassword);
-
+  // No staff, door or admin accounts here: Nepthic staff sign in to the separate Admin Portal.
   // Demo accounts for local testing only.
   if (process.env.NODE_ENV !== "production") {
-    await user("staff@events.nepthic.com", "Events Staff", "STAFF", adminPassword);
-    await user("door@events.nepthic.com", "Door Staff", "DOOR", adminPassword);
     await user("jordan@example.com", "Jordan Lee", "CUSTOMER", "demo-password");
 
     const sample = [
@@ -54,7 +50,7 @@ async function main() {
     // A year of sample trading so the Admin dashboard has data (skipped with SEED_SAMPLE_HISTORY=0).
     await seedSampleHistory(await bcrypt.hash("demo-password", 10));
   }
-  console.log("Seeded Events. Admin login:", process.env.SEED_ADMIN_EMAIL || "admin@events.nepthic.com");
+  console.log("Seeded Events.");
 }
 
 main().finally(() => pool.end());
