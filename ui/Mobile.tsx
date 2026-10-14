@@ -49,7 +49,7 @@ export function BottomNav({ items, label = "Main" }: { items: NavItem[]; label?:
     <nav className="bottom-nav" aria-label={label}>
       {items.map((i) => (
         <a key={i.href} href={i.href} aria-current={best === i.href ? "page" : undefined}>
-          <span className="bn-icon"><Icon name={i.icon} />{!!i.badge && <span className="bn-badge">{i.badge}</span>}</span>
+          <span className="bn-icon"><Icon name={i.icon} filled={best === i.href} />{!!i.badge && <span className="bn-badge">{i.badge}</span>}</span>
           <span className="bn-label">{i.label}</span>
         </a>
       ))}

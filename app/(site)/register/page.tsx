@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Field } from "@/ui/ux/Field";
 import { ActionForm, Submit } from "@/ui/Forms";
 import { register } from "@/app/actions/auth";
 
@@ -15,9 +16,9 @@ export default async function Register({ searchParams }: { searchParams: Promise
       </div>
       <ActionForm action={register} className="panel prox">
         <input type="hidden" name="next" value={next ?? "/tickets"} />
-        <label className="f">Full name (printed on tickets)<input type="text" name="name" autoComplete="name" required /></label>
-        <label className="f">Email<input type="email" name="email" autoComplete="email" required /></label>
-        <label className="f">Password<input type="password" name="password" autoComplete="new-password" minLength={10} required /></label>
+        <Field label="Full name (printed on tickets)" name="name" autoComplete="name" autoCapitalize="words" required />
+        <Field label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} required />
+        <Field label="Password" type="password" name="password" autoComplete="new-password" minLength={10} required hint="At least 10 characters" />
         <Submit pendingText="Creating…">Create account</Submit>
       </ActionForm>
       <p className="dim small">Already have one? <Link href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}>Sign in</Link>.</p>

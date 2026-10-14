@@ -1,0 +1,19 @@
+/* Storefront look (public pages only): one type family for the interface, the display face
+   only for the wordmark, consistent radii, and glass on floating chrome. Admin keeps its own. */
+/* ---------- type: one family for the interface; the wordmark keeps the display face ---------- */
+body { font-size: var(--t-md); line-height: var(--lh); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+h1, h2, h3, .h3 { font-family: var(--f-body); letter-spacing: -.02em; line-height: var(--lh-tight); }
+h1 { font-size: clamp(var(--t-2xl), 4.4vw, var(--t-3xl) * 1.25); font-weight: 800; }
+h1.page { font-size: clamp(var(--t-xl), 3vw, var(--t-2xl)); font-weight: 800; }
+h2 { font-size: clamp(var(--t-lg), 2.2vw, var(--t-xl)); font-weight: 750; }
+.h3 { font-size: var(--t-lg); font-weight: 700; letter-spacing: -.01em; }
+.tier b { font-family: var(--f-body); font-weight: 800; letter-spacing: -.02em; }
+.logo, .mast-mark { font-family: var(--f-display); }
+
+/* ---------- consistent shape and elevation ---------- */
+.panel, .card, .tier, .empty { border-radius: var(--r-md); }
+.panel { box-shadow: var(--e-1); }
+input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], input[type=datetime-local], input[type=tel], input[type=search], select, textarea { border-radius: var(--r-sm); min-height: 44px; }
+.top { background: var(--glass) !important; -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); border-bottom-color: transparent !important; box-shadow: 0 1px 0 var(--line); }
+.bottom-nav { background: var(--glass) !important; -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+

@@ -2,7 +2,7 @@
    writes it. Money is stored in integer cents (AUD). */
 import { randomUUID } from "node:crypto";
 import { relations, sql } from "drizzle-orm";
-import { boolean, customType, index, integer, jsonb, pgEnum, pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, customType, index, integer, jsonb, pgEnum, pgTable, real, serial, text, timestamp, primaryKey } from "drizzle-orm/pg-core";
 
 const id = () => text("id").primaryKey().$defaultFn(() => randomUUID());
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -181,3 +181,10 @@ export const refundRequestsRelations = relations(refundRequests, ({ one }) => ({
   ticket: one(tickets, { fields: [refundRequests.ticketId], references: [tickets.id] }),
   user: one(users, { fields: [refundRequests.userId], references: [users.id] }),
 }));
+
+/* Things a signed-in person has saved (the heart on a event card). Private to that person. */
+export const savedItems = pgTable("saved_items", {
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  itemId: text("item_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.userId, t.itemId] })]);

@@ -1,0 +1,226 @@
+/* ==========================================================================
+   Nepthic app-like UI layer — design tokens, motion system and interaction styles.
+   Each Nepthic site keeps its own copy (no shared runtime). Pairs with ui/ux/*.tsx.
+   Rules: animate only transform and opacity; 150 / 250 / 350ms; one easing curve;
+   everything collapses to simple fades with prefers-reduced-motion.
+   ========================================================================== */
+:root {
+  /* motion */
+  --dur-s: 150ms; --dur-m: 250ms; --dur-l: 350ms;
+  --ease: cubic-bezier(.2, .8, .2, 1);                 /* standard: fast out, soft landing */
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);      /* small overshoot for pops and sheets */
+  --press: .97;
+  /* spacing: 8px scale (4 for hairline tweaks) */
+  --s-0: 4px; --s-1: 8px; --s-2: 16px; --s-3: 24px; --s-4: 32px; --s-5: 40px; --s-6: 48px; --s-8: 64px;
+  /* type scale (px → rem at 16px) */
+  --t-xs: .75rem; --t-sm: .875rem; --t-md: 1rem; --t-lg: 1.25rem; --t-xl: 1.5rem; --t-2xl: 2rem; --t-3xl: 2.5rem;
+  --lh-tight: 1.15; --lh: 1.55;
+  /* radius */
+  --r-sm: 12px; --r-md: 20px; --r-pill: 999px;
+  /* elevation: soft, layered; glass for floating chrome */
+  --e-1: 0 1px 2px rgb(0 0 0 / .18), 0 2px 8px rgb(0 0 0 / .12);
+  --e-2: 0 2px 6px rgb(0 0 0 / .18), 0 12px 32px rgb(0 0 0 / .28);
+  --e-3: 0 8px 24px rgb(0 0 0 / .28), 0 24px 64px rgb(0 0 0 / .32);
+  --glass: color-mix(in oklab, var(--raised) 78%, transparent);
+  --blur: saturate(160%) blur(18px);
+}
+:root[data-theme="light"] { --e-1: 0 1px 2px rgb(27 21 38 / .06), 0 2px 8px rgb(27 21 38 / .05); --e-2: 0 2px 6px rgb(27 21 38 / .06), 0 12px 32px rgb(27 21 38 / .09); --e-3: 0 8px 24px rgb(27 21 38 / .1), 0 24px 64px rgb(27 21 38 / .12); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --e-1: 0 1px 2px rgb(27 21 38 / .06), 0 2px 8px rgb(27 21 38 / .05); --e-2: 0 2px 6px rgb(27 21 38 / .06), 0 12px 32px rgb(27 21 38 / .09); --e-3: 0 8px 24px rgb(27 21 38 / .1), 0 24px 64px rgb(27 21 38 / .12); } }
+
+/* ---------- 1. instant feedback: every press responds within a frame ---------- */
+.btn, .tab, .chip, .menu-btn, .bottom-nav a, .card[href], a.card, .prod-card, .ev-card, .stepper button, .heart, .seg label, button {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--dur-s) var(--ease), opacity var(--dur-s) var(--ease), background-color var(--dur-m) var(--ease), border-color var(--dur-m) var(--ease), color var(--dur-m) var(--ease), box-shadow var(--dur-m) var(--ease);
+}
+.btn:active:not([disabled]), .tab:active, .chip:active, .menu-btn:active, .stepper button:active, .heart:active, button:active:not([disabled]) { transform: scale(var(--press)); }
+a.card:active, .card[href]:active, .prod-card:active, .ev-card:active, .bottom-nav a:active { transform: scale(.985); }
+@media (hover: hover) {
+  .btn:hover:not([disabled]) { transform: translateY(-1px); box-shadow: var(--e-1); }
+  .btn:active:not([disabled]) { transform: translateY(0) scale(var(--press)); box-shadow: none; }
+}
+
+/* buttons: spinner while working, a check when done */
+.btn { position: relative; }
+.btn[data-state="pending"] { color: transparent !important; pointer-events: none; }
+.btn[data-state="pending"]::after { content: ""; position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid currentColor; border-color: var(--btn-ink, var(--fg)) transparent var(--btn-ink, var(--fg)) var(--btn-ink, var(--fg)); animation: ux-spin .7s linear infinite; }
+.btn-primary { --btn-ink: var(--on-accent); }
+.btn .ux-check { display: inline-grid; place-items: center; animation: ux-pop var(--dur-l) var(--ease-spring); }
+@keyframes ux-spin { to { transform: rotate(360deg); } }
+@keyframes ux-pop { 0% { transform: scale(.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* ---------- 2. page transitions (View Transitions API, driven by ux/AppShell.tsx) ---------- */
+::view-transition-old(root) { animation: ux-out var(--dur-m) var(--ease) both; }
+::view-transition-new(root) { animation: ux-in var(--dur-l) var(--ease) both; }
+::view-transition-group(*) { animation-duration: var(--dur-l); animation-timing-function: var(--ease); }
+/* chrome stays put while the page changes underneath it */
+.top { view-transition-name: site-header; }
+.bottom-nav { view-transition-name: bottom-nav; }
+::view-transition-old(site-header), ::view-transition-new(site-header), ::view-transition-old(bottom-nav), ::view-transition-new(bottom-nav) { animation: none; }
+html[data-nav="back"]::view-transition-new(root) { animation-name: ux-in-back; }
+@keyframes ux-out { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes ux-in { from { opacity: 0; transform: translateY(10px); } }
+@keyframes ux-in-back { from { opacity: 0; transform: translateY(-10px); } }
+/* theme switch: a circle grows from the toggle */
+html[data-theme-switch]::view-transition-old(root), html[data-theme-switch]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html[data-theme-switch]::view-transition-new(root) { animation: ux-reveal 500ms var(--ease) both; }
+@keyframes ux-reveal { from { clip-path: circle(0 at var(--tx, 50%) var(--ty, 0)); } to { clip-path: circle(150vmax at var(--tx, 50%) var(--ty, 0)); } }
+
+/* lists and grids: subtle stagger on first load only (ux/Stagger.tsx sets data-enter) */
+/* list cells: a grid cell that lets the card inside fill it */
+.li { display: grid; min-width: 0; }
+.li > * { min-width: 0; }
+[data-enter] > *, .li[data-new] { animation: ux-rise var(--dur-l) var(--ease) both; animation-delay: calc(min(var(--i, 0), 10) * 40ms); }
+@keyframes ux-rise { from { opacity: 0; transform: translateY(12px); } }
+
+/* ---------- skeletons: same shapes as the real content ---------- */
+.sk { position: relative; overflow: hidden; background: var(--surface-2); border-radius: var(--r-sm); }
+.sk::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--fg) 7%, transparent), transparent); animation: ux-shimmer 1.3s var(--ease) infinite; }
+@keyframes ux-shimmer { to { transform: translateX(100%); } }
+.sk-line { height: 12px; border-radius: 6px; } .sk-line.lg { height: 22px; width: 60%; } .sk-line.sm { width: 40%; }
+.sk-img { aspect-ratio: 4 / 3; border-radius: var(--r-md) var(--r-md) 0 0; }
+.sk-poster { aspect-ratio: 5 / 4; border-radius: var(--r-md) var(--r-md) 0 0; }
+.sk-card { border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line); overflow: hidden; display: grid; }
+.sk-card .sk-body { display: grid; gap: 10px; padding: 14px 16px 18px; }
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: var(--s-2); }
+.sk-rows { display: grid; gap: 10px; }
+.sk-row { height: 56px; border-radius: var(--r-sm); }
+
+/* ---------- blur-up images: fixed ratio, blurred placeholder fades into the real image ---------- */
+.bimg { position: relative; overflow: hidden; background: var(--ph, var(--surface-2)); aspect-ratio: var(--ratio, 4 / 3); max-width: 100%; }
+.bimg::before { content: ""; position: absolute; inset: -20px; background: inherit; filter: blur(16px); transform: scale(1.1); }
+.bimg img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transform: scale(1.02); transition: opacity var(--dur-l) var(--ease), transform var(--dur-l) var(--ease); }
+.bimg img[data-loaded] { opacity: 1; transform: none; }
+
+/* posters with a real cover photo: the photo sits under the title with a fade for legibility */
+.poster.has-img .poster-img { position: absolute; inset: 0; aspect-ratio: auto; z-index: 0; }
+.poster.has-img::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(transparent 40%, rgb(11 10 16 / .9)); pointer-events: none; }
+.poster.has-img > .poster-name, .poster.has-img > .poster-venue { position: relative; z-index: 2; }
+.poster.has-img > .poster-date { z-index: 2; }
+.garment { view-transition-class: art; }
+
+/* ---------- 3. micro-interactions ---------- */
+/* save heart */
+.heart { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer; color: var(--fg);
+  background: color-mix(in oklab, var(--bg) 55%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.heart svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; transition: fill var(--dur-s) var(--ease); }
+.heart[aria-pressed="true"] { color: #F43F5E; }
+.heart[aria-pressed="true"] svg { fill: currentColor; animation: ux-heart 450ms var(--ease-spring); }
+.heart[aria-pressed="true"]::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid #F43F5E; animation: ux-burst 500ms var(--ease) forwards; }
+.heart { position: relative; }
+@keyframes ux-heart { 0% { transform: scale(.6); } 50% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes ux-burst { from { transform: scale(.6); opacity: .9; } to { transform: scale(1.6); opacity: 0; } }
+.card-save { position: absolute; top: 10px; right: 10px; z-index: 3; }
+
+/* cart badge bump + flying thumbnail */
+.bump { animation: ux-bump 450ms var(--ease-spring); }
+@keyframes ux-bump { 0% { transform: scale(1); } 40% { transform: scale(1.45); } 100% { transform: scale(1); } }
+.fly { position: fixed; z-index: 2147483000; pointer-events: none; border-radius: 14px; overflow: hidden; box-shadow: var(--e-3); will-change: transform, opacity; }
+
+/* sliding indicator under tabs (positioned by AppShell) */
+.tabs, .chips { position: relative; }
+.tabs::after { content: ""; position: absolute; left: 0; top: var(--ink-y, 100%); height: 2px; width: 1px; border-radius: 2px; background: var(--accent);
+  transform-origin: left center; transform: translateX(var(--ink-x, 0)) scaleX(var(--ink-w, 0));
+  transition: transform var(--dur-m) var(--ease); pointer-events: none; }
+.tabs[data-ink-init]::after { transition: none; }
+.tabs .tab[aria-current="page"], .tabs .tab[aria-selected="true"] { background: transparent; border-color: transparent; }
+
+/* steppers: the number nudges when it changes */
+.stepper input, .stepper output { display: inline-block; transition: transform var(--dur-s) var(--ease); }
+.stepper input[data-nudge], .stepper output[data-nudge] { transform: scale(1.18); }
+
+/* toggles */
+input[type=checkbox].switch { appearance: none; width: 44px; height: 26px; border-radius: 999px; background: var(--line-strong); position: relative; cursor: pointer; transition: background-color var(--dur-m) var(--ease); flex: none; }
+input[type=checkbox].switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: var(--e-1); transition: transform var(--dur-m) var(--ease-spring); }
+input[type=checkbox].switch:checked { background: var(--accent); }
+input[type=checkbox].switch:checked::after { transform: translateX(18px); }
+
+/* toasts: bottom on phones (above the tab bar), top-right on desktop */
+.toasts { position: fixed; z-index: 2147482000; left: 0; right: 0; bottom: calc(var(--nav-h, 0px) + env(safe-area-inset-bottom, 0px) + 12px);
+  display: grid; justify-items: center; gap: 8px; padding-inline: max(16px, env(safe-area-inset-left, 0px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: min(92vw, 440px); padding: 12px 12px 12px 16px; border-radius: 16px;
+  background: color-mix(in oklab, var(--raised) 92%, transparent); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  color: var(--fg); box-shadow: var(--e-3); border: 1px solid var(--line-strong); font-weight: 600; font-size: var(--t-sm);
+  animation: ux-toast-in var(--dur-l) var(--ease-spring) both; touch-action: pan-y; }
+.toast[data-leaving] { animation: ux-toast-out var(--dur-m) var(--ease) both; }
+.toast .t-ico { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; background: color-mix(in oklab, var(--ok) 25%, transparent); color: var(--ok); }
+.toast[data-tone="bad"] .t-ico { background: color-mix(in oklab, var(--bad) 25%, transparent); color: var(--bad); }
+.toast[data-tone="info"] .t-ico { background: color-mix(in oklab, var(--accent) 25%, transparent); color: var(--link); }
+.toast .t-msg { flex: 1; min-width: 0; }
+.toast .t-act { border: 0; background: none; color: var(--link); font-weight: 800; padding: 6px 10px; border-radius: 10px; cursor: pointer; text-decoration: none; font-size: var(--t-sm); }
+@keyframes ux-toast-in { from { opacity: 0; transform: translateY(24px) scale(.96); } }
+@keyframes ux-toast-out { to { opacity: 0; transform: translateY(16px) scale(.96); } }
+@media (min-width: 761px) {
+  .toasts { top: calc(env(safe-area-inset-top, 0px) + 76px); bottom: auto; justify-items: end; padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+  @keyframes ux-toast-in { from { opacity: 0; transform: translateX(24px) scale(.96); } }
+  @keyframes ux-toast-out { to { opacity: 0; transform: translateX(24px) scale(.96); } }
+}
+
+/* optimistic state on a card: shows the result straight away, rolls back if the server says no */
+[data-optimistic] { position: relative; }
+[data-optimistic] > * { transition: opacity var(--dur-m) var(--ease); }
+[data-optimistic="on"] > *:not(.opt-badge) { opacity: .45; }
+.opt-badge { position: absolute; top: 12px; right: 12px; z-index: 4; animation: ux-pop var(--dur-l) var(--ease-spring); }
+
+/* pull to refresh */
+.ptr { position: relative; }
+.ptr-ind { position: absolute; left: 50%; top: 0; width: 36px; height: 36px; margin-left: -18px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--raised); box-shadow: var(--e-2); color: var(--link); opacity: 0; transform: translateY(-48px); pointer-events: none; z-index: 5; }
+.ptr-ind svg { transition: transform var(--dur-s) linear; }
+.ptr[data-ptr="loading"] .ptr-ind svg { animation: ux-spin .7s linear infinite; }
+
+/* load more */
+.more-wrap { display: grid; justify-items: center; gap: 8px; margin-top: var(--s-3); }
+
+/* instant search */
+.search { position: relative; display: grid; gap: 8px; }
+.search input { padding-left: 40px; border-radius: var(--r-pill) !important; }
+.search .s-ico { position: absolute; left: 13px; top: 11px; color: var(--dim); pointer-events: none; }
+.search-recents { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--r-pill); border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--fg); font-size: var(--t-sm); font-weight: 600; cursor: pointer; text-decoration: none; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+
+/* ---------- 6. forms: floating labels + inline validation (ux/Field.tsx) ---------- */
+.fl { position: relative; display: grid; gap: 4px; }
+.fl input, .fl textarea, .fl select { padding: 22px 14px 8px; min-height: 56px; }
+.fl > span.fl-label { position: absolute; left: 15px; top: 18px; color: var(--muted); font-size: var(--t-md); pointer-events: none; transform-origin: left top;
+  transition: transform var(--dur-m) var(--ease), color var(--dur-m) var(--ease); }
+.fl input:focus ~ span.fl-label, .fl input:not(:placeholder-shown) ~ span.fl-label, .fl textarea:focus ~ span.fl-label, .fl textarea:not(:placeholder-shown) ~ span.fl-label,
+.fl select ~ span.fl-label { transform: translateY(-11px) scale(.76); }
+.fl input:focus ~ span.fl-label, .fl textarea:focus ~ span.fl-label { color: var(--link); }
+.fl[data-invalid] input, .fl[data-invalid] textarea, .fl[data-invalid] select { border-color: var(--bad); }
+.fl[data-valid] input { border-color: color-mix(in oklab, var(--ok) 60%, var(--line-input)); }
+.fl-msg { font-size: var(--t-xs); min-height: 1.1em; color: var(--muted); }
+.fl[data-invalid] .fl-msg { color: var(--bad); }
+.fl-msg:empty { min-height: 0; }
+
+/* multi-step progress: segments fill from the left as you go */
+.steps { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.steps span { position: relative; overflow: hidden; height: 4px; border-radius: 4px; background: var(--line-strong) !important; }
+.steps span::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform var(--dur-l) var(--ease); }
+.steps span.on::after { transform: scaleX(1); }
+.steps-label { font-size: var(--t-xs); color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+
+/* theme toggle */
+.theme-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; color: var(--fg); }
+
+/* bottom nav: filled icon when active, with a little pop */
+.bottom-nav a[aria-current="page"] .bn-icon svg { animation: ux-pop var(--dur-l) var(--ease-spring); }
+
+/* carousels: momentum + snap */
+.carousel, .h-scroll { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; scrollbar-width: none; }
+.carousel > *, .h-scroll > * { scroll-snap-align: start; }
+
+/* ---------- reduced motion: keep it simple ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: ux-fade var(--dur-s) linear both !important; }
+  ::view-transition-old(root) { animation-direction: reverse !important; }
+  @keyframes ux-fade { from { opacity: 0; } }
+  .sk::after { display: none; }
+  .btn:active, button:active { transform: none !important; }
+}
+
+/* a card with a floating control (the save heart) on top of its link */
+.card-wrap { position: relative; display: grid; min-width: 0; }

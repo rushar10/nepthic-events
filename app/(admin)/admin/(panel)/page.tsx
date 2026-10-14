@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PullToRefresh } from "@/ui/ux/PullToRefresh";
 import { Icon } from "@/ui/Icons";
 import { aud0 } from "@/ui/format";
 import { guard } from "@/lib/admin/guard";
@@ -24,7 +25,7 @@ export default async function Overview() {
   const segments = byEvent.map((e, i) => ({ key: e.label, label: e.label, color: SEGMENT_COLOURS[i] ?? "#6E6680", value: e.value }));
 
   return (
-    <>
+    <PullToRefresh>
       <div className="dash-head"><h1>Events Dashboard</h1></div>
       <div className="dash-grid">
         <div className="dash-main">
@@ -95,6 +96,6 @@ export default async function Overview() {
           </div>
         </div>
       </div>
-    </>
+    </PullToRefresh>
   );
 }

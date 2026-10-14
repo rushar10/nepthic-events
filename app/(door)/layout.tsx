@@ -27,7 +27,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const [user, settings] = await Promise.all([getUser(), getSettings()]);
   const staff = !!user && DOOR_ROLES.includes(user.role);
   return (
-    <html lang="en-AU">
+    // Always dark: door staff use this in dim venues, and it saves battery.
+    <html lang="en-AU" data-theme="dark">
       <body className="site-ev">
         <header className="top" style={{ flexWrap: "nowrap", gap: 8 }}>
           <a className="logo" href="/door" style={{ whiteSpace: "nowrap" }}>NEPTHIC<span className="logo-site">Door</span></a>

@@ -46,8 +46,8 @@ export default async function Refunds({ searchParams }: { searchParams: Promise<
                 <input type="hidden" name="refundId" value={r.id} />
                 <label className="f">Note to buyer (optional)<input type="text" name="note" /></label>
                 <div className="row">
-                  <Submit className="btn btn-ok" name="decision" value="APPROVED" swipe="approve" pendingText="Refunding…">Approve and refund {aud(r.amountCents)}</Submit>
-                  <Submit className="btn btn-bad" name="decision" value="REJECTED" swipe="reject" pendingText="Saving…">Reject, keep ticket valid</Submit>
+                  <Submit className="btn btn-ok" name="decision" value="APPROVED" swipe="approve" optimistic="Refund approved" pendingText="Refunding…">Approve and refund {aud(r.amountCents)}</Submit>
+                  <Submit className="btn btn-bad" name="decision" value="REJECTED" swipe="reject" optimistic="Rejected" pendingText="Saving…">Reject, keep ticket valid</Submit>
                 </div>
               </ActionForm>
             ) : <p className="small dim">Waiting for an admin to decide.</p>) : r.decisionNote && <p className="note small">{r.decisionNote}</p>}

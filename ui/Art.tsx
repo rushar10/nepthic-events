@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { dayMonth } from "./format";
+import { BlurImage } from "./ux/BlurImage";
 
 /* Placeholder artwork until real product photography and event posters are linked.
    Products with imageUrl, and events with a cover upload, use the real image instead. */
@@ -13,18 +14,21 @@ const SHAPES: Record<string, string> = {
   Headwear: '<path d="M18 64q1-34 30-35 29 1 30 35z"/><path d="M46 64h46q-2 9-14 9l-32-3z"/>',
 };
 
-export function Garment({ category, hue, imageUrl, alt }: { category: string; hue: number; imageUrl?: string | null; alt: string }) {
-  if (imageUrl) return <div className="garment"><img src={imageUrl} alt={alt} /></div>;
+/* `vt` names the image for shared-element page transitions: the card's picture grows into
+   the product page's picture. Real photos blur up from a colour placeholder. */
+export function Garment({ category, hue, imageUrl, alt, vt, priority }: { category: string; hue: number; imageUrl?: string | null; alt: string; vt?: string; priority?: boolean }) {
+  if (imageUrl) return <BlurImage src={imageUrl} alt={alt} ratio="4 / 3" placeholder={`hsl(${hue} 30% 22%)`} vt={vt} priority={priority} sizes="(max-width: 760px) 50vw, 300px" />;
   return (
-    <div className="garment" style={{ "--h": hue } as CSSProperties}>
+    <div className="garment" style={{ "--h": hue, viewTransitionName: vt } as CSSProperties}>
       <svg viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{ __html: SHAPES[category] ?? SHAPES.Tees }} />
     </div>
   );
 }
 
-export function Poster({ name, venue, city, startsAt, hue, big, imageUrl }: { name: string; venue: string; city: string; startsAt: Date; hue: number; big?: boolean; imageUrl?: string | null }) {
+export function Poster({ name, venue, city, startsAt, hue, big, imageUrl, vt, priority }: { name: string; venue: string; city: string; startsAt: Date; hue: number; big?: boolean; imageUrl?: string | null; vt?: string; priority?: boolean }) {
   return (
-    <div className={`poster${big ? " big" : ""}`} style={{ "--h": hue, ...(imageUrl ? { backgroundImage: `linear-gradient(transparent 40%, rgba(11,10,16,.9)), url(${imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}) } as CSSProperties}>
+    <div className={`poster${big ? " big" : ""}${imageUrl ? " has-img" : ""}`} style={{ "--h": hue, viewTransitionName: vt } as CSSProperties}>
+      {imageUrl && <BlurImage className="poster-img" src={imageUrl} alt="" ratio="auto" placeholder={`hsl(${hue} 40% 18%)`} priority={priority} sizes="(max-width: 760px) 100vw, 600px" />}
       <span className="poster-date mono">{dayMonth(startsAt)}</span>
       <span className="poster-name">{name}</span>
       <span className="poster-venue">{venue} · {city}</span>

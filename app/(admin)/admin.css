@@ -322,3 +322,9 @@ body.site-adm {
   .bc-fill, .donut .seg, .spark .line { animation: none !important; }
   .bc-fill, .bc-dot, .bc-tip, .donut circle, .ev-progress i { transition: none !important; }
 }
+
+/* app-like navigation: the rail and top bar stay put while the page changes */
+.adm-top { view-transition-name: site-header; }
+.adm-rail { view-transition-name: admin-rail; }
+::view-transition-old(admin-rail), ::view-transition-new(admin-rail) { animation: none; }
+.adm-page > .ptr { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); align-content: start; }

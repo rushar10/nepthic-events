@@ -75,24 +75,31 @@ export function startReveal(opts: Partial<RevealOptions> = {}): () => void {
   }
 
   /* Paint both layers: rows of V-shaped knit stitches. */
+  /* Light theme: dark stitches on a light page, and a slightly stronger colour layer. */
+  const isLight = () => getComputedStyle(document.documentElement).colorScheme.includes("light") && !getComputedStyle(document.documentElement).colorScheme.includes("dark");
+  /* Painting thousands of stitches is split into ~6ms slices across frames, so it never
+     blocks input or the first paint. The texture fades in when it's ready. */
+  let paintToken = 0;
+  let painted = false;
   function paint() {
+    const token = ++paintToken;
+    const light = isLight();
     dpr = Math.min(1.5, window.devicePixelRatio || 1);
     W = window.innerWidth; H = window.innerHeight;
-    for (const c of [canvas, base, vivid, mask]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
-    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    for (const c of [base, vivid, mask]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
     const b = base.getContext("2d")!, v = vivid.getContext("2d")!;
     for (const g of [b, v]) { g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H); g.lineCap = "round"; g.lineJoin = "round"; }
 
     const cw = 13, ch = 11;                 // stitch size, px
-    for (let row = -1, py = -ch; py < H + ch; row++, py += ch) {
-      const off = (row % 2) * 0;            // straight wales, like a knit
-      for (let px = -cw + off; px < W + cw; px += cw) {
+    let py = -ch;
+    const row = () => {
+      for (let px = -cw; px < W + cw; px += cw) {
         // tiny irregularity so it reads as fabric, not a grid
         const j = Math.sin(px * 12.9898 + py * 78.233) * 43758.5453, n = j - Math.floor(j);
         const cx = px + cw / 2, top = py + (n - 0.5) * 1.2, bot = py + ch * 1.15;
         const lum = shade(cx, py) * (0.85 + n * 0.3);
         // the stitch: two legs of a V
-        b.strokeStyle = `rgba(214, 206, 230, ${o.base * lum})`;
+        b.strokeStyle = light ? `rgba(40, 28, 64, ${o.base * 0.6 * lum})` : `rgba(214, 206, 230, ${o.base * lum})`;
         b.lineWidth = 2.1;
         b.beginPath(); b.moveTo(px + 1.5, top); b.quadraticCurveTo(cx - 2, bot - 3, cx, bot); b.quadraticCurveTo(cx + 2, bot - 3, px + cw - 1.5, top); b.stroke();
         const [r, g, bl] = colourAt(cx, py);
@@ -105,8 +112,19 @@ export function startReveal(opts: Partial<RevealOptions> = {}): () => void {
         v.lineWidth = 0.7;
         v.beginPath(); v.moveTo(px + 2.4, top + 0.6); v.quadraticCurveTo(cx - 2.6, bot - 3.6, cx - 0.6, bot - 0.8); v.stroke();
       }
-    }
-    draw();
+      py += ch;
+    };
+    const slice = () => {
+      if (token !== paintToken) return;                 // a newer paint (resize, theme) took over
+      const t0 = performance.now();
+      while (py < H + ch && performance.now() - t0 < 6) row();
+      if (py < H + ch) { requestAnimationFrame(slice); return; }
+      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      canvas.style.width = W + "px"; canvas.style.height = H + "px";
+      draw();
+      canvas.style.opacity = "1";
+    };
+    requestAnimationFrame(slice);
   }
 
   function draw() {
@@ -157,20 +175,39 @@ export function startReveal(opts: Partial<RevealOptions> = {}): () => void {
   const leave = () => { onTarget = 0; wake(); };
   const onOut = (e: MouseEvent) => { if (!e.relatedTarget) leave(); };
   let rt = 0;
-  const onResize = () => { clearTimeout(rt); rt = window.setTimeout(paint, 150); };
+  const onResize = () => { if (!painted) return; clearTimeout(rt); rt = window.setTimeout(paint, 150); };
   window.addEventListener("pointermove", onMove, { passive: true });
   window.addEventListener("pointerdown", onDown, { passive: true });
   document.addEventListener("mouseout", onOut);
   window.addEventListener("blur", leave);
   window.addEventListener("resize", onResize, { passive: true });
-  paint();
+  canvas.style.opacity = "0";
+  canvas.style.transition = "opacity 600ms ease";
+  // repaint when the theme changes (toggle or device setting)
+  const themeMo = new MutationObserver(() => onResize());
+  themeMo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
+  const mq = window.matchMedia("(prefers-color-scheme: light)");
+  mq.addEventListener?.("change", onResize);
+  // First paint waits until the page has loaded and the browser is idle (never competes with content).
+  const idle = (f: () => void) => ((window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback ?? ((g: () => void) => setTimeout(g, 200)))(f, { timeout: 2500 });
+  // On touch screens nothing is revealed until a finger lands, so the texture is only painted
+  // then: phones never spend start-up time (or battery) on it.
+  const touchOnly = window.matchMedia("(hover: none)").matches;
+  const firstTouch = () => { if (!painted) { painted = true; paint(); } };
+  const kick = () => idle(() => { painted = true; paint(); });
+  if (touchOnly) window.addEventListener("pointerdown", firstTouch, { once: true, passive: true });
+  else if (document.readyState === "complete") kick(); else window.addEventListener("load", kick, { once: true });
   return () => {
+    paintToken++;
+    window.removeEventListener("load", kick);
+    window.removeEventListener("pointerdown", firstTouch);
     cancelAnimationFrame(raf); clearTimeout(rt); clearTimeout(fadeTimer);
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerdown", onDown);
     document.removeEventListener("mouseout", onOut);
     window.removeEventListener("blur", leave);
     window.removeEventListener("resize", onResize);
+    themeMo.disconnect(); mq.removeEventListener?.("change", onResize);
     canvas.remove();
   };
 }

@@ -6,8 +6,10 @@ import { HeaderScroll, MenuDrawer } from "./Mobile";
  * `logoHref` (this site's home by default) and the navigation covers this site only.
  * Phone: compact bar that hides on scroll down; links and account move into a slide-out menu.
  */
-export function SiteHeader({ siteName, logoHref = "/", nav, account, menu }: {
+export function SiteHeader({ siteName, logoHref = "/", nav, account, menu, tools }: {
   siteName: string; logoHref?: string; nav?: ReactNode; account?: ReactNode; menu?: ReactNode;
+  /** small controls shown on every screen size (e.g. the theme switch) */
+  tools?: ReactNode;
 }) {
   return (
     <header className="top">
@@ -16,8 +18,10 @@ export function SiteHeader({ siteName, logoHref = "/", nav, account, menu }: {
       <div className="top-right desk">
         {nav}
         {account}
+        {tools}
       </div>
-      <div className="mob">
+      <div className="mob row" style={{ gap: 8, marginLeft: "auto", flexWrap: "nowrap" }}>
+        {tools}
         <MenuDrawer label={`${siteName} menu`}>
           <p className="eyebrow">Nepthic {siteName}</p>
           {menu && <div className="drawer-links">{menu}</div>}

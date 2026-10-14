@@ -1,7 +1,7 @@
 /* Nepthic design system — Events copy.
    Brand tokens are copied into each Nepthic project (see brand/tokens.css in the
    nepthic-sites repo); nothing is shared at runtime. Ambient dark theme by default;
-   the light values apply only where a page sets data-theme="light" (admin toggle). */
+   light values follow the device setting, or data-theme="light"/"dark" when someone picks one. */
 :root {
   /* Nepthic brand (same on every site) */
   --bg: #0E0B14;            /* midnight plum canvas */
@@ -41,6 +41,15 @@
   --accent: #BE185D; --on-accent: #FFFFFF; --link: #BE185D; --c1: #BE185D;
   color-scheme: light;
 }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #F6F3FB; --bg-glow: #E4D6FA; --raised: #FFFFFF; --surface: #FFFFFF; --surface-2: #F6F3FB; --hover: #EDE7F6;
+  --line: rgb(23 19 31 / .09); --line-input: #8E86A0; --line-strong: rgb(23 19 31 / .18);
+  --fg: #1B1526; --muted: #5A5168; --dim: #6E6680;
+  --ok: #047857; --warn: #B45309; --bad: #DC2626;
+  --shadow: 0 1px 2px rgb(27 21 38 / .05), 0 12px 32px rgb(27 21 38 / .08);
+  --accent: #BE185D; --on-accent: #FFFFFF; --link: #BE185D; --c1: #BE185D;
+  color-scheme: light;
+} }
 html body { background: radial-gradient(1100px 700px at 100% -8%, var(--bg-glow), transparent 62%) no-repeat fixed, var(--bg); }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }

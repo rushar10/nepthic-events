@@ -33,9 +33,9 @@ const P: Record<string, string> = {
 
 export type IconName = keyof typeof P;
 
-export function Icon({ name, size = 22, label }: { name: string; size?: number; label?: string }) {
+export function Icon({ name, size = 22, label, filled = false }: { name: string; size?: number; label?: string; filled?: boolean }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} fillOpacity={filled ? 0.9 : undefined} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
       aria-hidden={label ? undefined : true} role={label ? "img" : undefined} aria-label={label}>
       <path d={P[name] ?? P.grid} />
     </svg>

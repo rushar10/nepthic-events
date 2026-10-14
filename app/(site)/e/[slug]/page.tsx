@@ -7,6 +7,8 @@ import { dateLong, time } from "@/ui/format";
 import { Poster } from "@/ui/Art";
 import { imageUrl } from "@/lib/events";
 import { TicketPicker } from "./TicketPicker";
+import { SaveButton } from "@/ui/ux/SaveButton";
+import { savedIds } from "@/lib/saved";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const e = await db.query.events.findFirst({ where: eq(events.slug, (await params).slug), columns: { name: true, description: true } });
@@ -20,7 +22,7 @@ export default async function EventPage({ params, searchParams }: { params: Prom
     with: { ticketTypes: { orderBy: asc(ticketTypes.sortOrder) } },
   });
   if (!e) notFound();
-  const [user, settings] = await Promise.all([getUser(), getSettings()]);
+  const [user, settings, saved] = await Promise.all([getUser(), getSettings(), savedIds()]);
   const past = e.startsAt < new Date();
   const sold = e.ticketTypes.reduce((a, t) => a + t.sold, 0);
 
@@ -30,7 +32,10 @@ export default async function EventPage({ params, searchParams }: { params: Prom
       {sp.cancelled && <p className="note warn">Checkout cancelled. Your seats were released and nothing was charged.</p>}
       <div className="split">
         <div className="stack">
-          <Poster big name={e.name} venue={e.venue} city={e.city} startsAt={e.startsAt} hue={e.hue} imageUrl={imageUrl(e.coverUploadId)} />
+          <div className="card-wrap">
+            <Poster big name={e.name} venue={e.venue} city={e.city} startsAt={e.startsAt} hue={e.hue} imageUrl={imageUrl(e.coverUploadId)} vt={`e-${e.slug}`} priority />
+            {!past && <SaveButton itemId={e.id} name={e.name} initial={saved.has(e.id)} />}
+          </div>
           <div className="stack-sm">
             <h1>{e.name}</h1>
             <p className="lede">{e.description}</p>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, desc, db, eq, ticketOrders } from "@/db";
 import { requireUser } from "@/core/auth";
 import { TicketCard } from "@/app/(site)/TicketCard";
+import { PullToRefresh } from "@/ui/ux/PullToRefresh";
 
 export const metadata = { title: "My tickets" };
 
@@ -18,6 +19,7 @@ export default async function MyTickets() {
   const past = all.filter((t) => t.event.startsAt < now);
 
   return (
+    <PullToRefresh>
     <div className="stack">
       <section className="hero" style={{ paddingBottom: 0 }}>
         <p className="eyebrow">Signed in as {user.name}</p>
@@ -43,5 +45,6 @@ export default async function MyTickets() {
         </section>
       )}
     </div>
+    </PullToRefresh>
   );
 }

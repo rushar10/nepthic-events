@@ -2,13 +2,17 @@ import Link from "next/link";
 import { aud0, dateLong, daysUntil } from "@/ui/format";
 import { Poster } from "@/ui/Art";
 import { availability, imageUrl, type EventWithTypes } from "@/lib/events";
+import { SaveButton } from "@/ui/ux/SaveButton";
 
-export function EventCard({ e, past }: { e: EventWithTypes; past?: boolean }) {
+/* Event card: the poster morphs into the event page's poster (shared view-transition name),
+   and the heart saves it for later. */
+export function EventCard({ e, past, saved = false }: { e: EventWithTypes; past?: boolean; saved?: boolean }) {
   const a = availability(e);
   const d = daysUntil(e.startsAt);
   return (
-    <Link href={`/e/${e.slug}`} className="evcard prox">
-      <Poster name={e.name} venue={e.venue} city={e.city} startsAt={e.startsAt} hue={e.hue} imageUrl={imageUrl(e.coverUploadId)} />
+    <div className="card-wrap">
+    <Link prefetch={false} href={`/e/${e.slug}`} className="evcard prox">
+      <Poster name={e.name} venue={e.venue} city={e.city} startsAt={e.startsAt} hue={e.hue} imageUrl={imageUrl(e.coverUploadId)} vt={`e-${e.slug}`} />
       <span className="ev-meta">
         <span className="spread">
           <span className="small">{dateLong(e.startsAt)}</span>
@@ -28,5 +32,7 @@ export function EventCard({ e, past }: { e: EventWithTypes; past?: boolean }) {
         )}
       </span>
     </Link>
+    {!past && <SaveButton itemId={e.id} name={e.name} initial={saved} />}
+    </div>
   );
 }

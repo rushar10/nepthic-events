@@ -3,6 +3,7 @@ import "@fontsource-variable/plus-jakarta-sans/index.css";
 import "@/ui/styles.css";
 import "@/ui/glow/glow.css";
 import "./admin.css";
+import "@/ui/ux/ux.css";
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -13,6 +14,7 @@ import { DOOR_ROLES, getUser } from "@/core/auth";
 import { getSettings } from "@/core/settings";
 import { pendingCounts } from "@/lib/admin/counts";
 import { ThemeToggle } from "@/components/admin/ThemeToggle";
+import { AppShell } from "@/ui/ux/AppShell";
 
 export const metadata: Metadata = {
   title: { default: "Nepthic Events Admin", template: "%s · Nepthic Events Admin" },
@@ -62,7 +64,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Half strength in Admin so numbers stay easy to read. */}
         <Proximity radius={settings.proximityRadius} intensity={settings.proximityIntensity} scale={0.55} enabled={settings.proximityEnabled} />
         <RegisterSW signedIn={!!user} />
-        <main className={staff ? undefined : "wrap"}>{children}</main>
+        <AppShell><main className={staff ? undefined : "wrap"}>{children}</main></AppShell>
       </body>
     </html>
   );

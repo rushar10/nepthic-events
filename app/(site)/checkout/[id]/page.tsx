@@ -4,6 +4,8 @@ import { and, db, eq, ticketOrders } from "@/db";
 import { requireUser } from "@/core/auth";
 import { aud } from "@/ui/format";
 import { TicketCard } from "@/app/(site)/TicketCard";
+import { Haptic } from "@/ui/ux/Haptic";
+import { Stagger } from "@/ui/ux/Stagger";
 
 export const metadata = { title: "Your tickets" };
 
@@ -37,16 +39,17 @@ export default async function Confirmation({ params }: { params: Promise<{ id: s
   }
   return (
     <div className="stack">
+      <Haptic kind="success" />
       <section className="hero">
         <p className="eyebrow">Payment received · {aud(o.totalCents)}</p>
         <h1>You&apos;re in.</h1>
         <p className="lede">{o.tickets.length} e-ticket{o.tickets.length > 1 ? "s" : ""} for {o.event.name}. We&apos;ve emailed {o.tickets.length > 1 ? "them" : "it"} to {o.buyerEmail}. Show one QR code per person at the door.</p>
       </section>
-      <div className="tickets">
+      <Stagger id={`confirm-${o.id}`} className="tickets">
         {o.tickets.map((t) => (
           <TicketCard key={t.id} code={t.code} status={t.status} holderName={t.holderName} checkedInAt={t.checkedInAt} typeName={t.ticketType.name} event={o.event} />
         ))}
-      </div>
+      </Stagger>
       <div className="row"><Link className="btn prox" href="/tickets">All my tickets</Link><Link className="btn btn-ghost" href="/">More events</Link></div>
     </div>
   );

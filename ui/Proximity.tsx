@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { acquireGlow, type GlowController, type GlowOptions } from "./glow/engine";
+import type { GlowController, GlowOptions } from "./glow/engine";
 
 export type GlowProviderProps = Partial<GlowOptions> & {
   /** false turns the effect off (Admin → Settings). */
@@ -21,11 +21,22 @@ export function GlowProvider({ enabled = true, scale = 1, intensity = 1, mode, .
   const options: Partial<GlowOptions> = { ...rest, intensity: intensity * scale, mode: enabled ? (mode ?? "auto") : "off" };
   const key = JSON.stringify(options);
 
+  const latest = useRef(options);
+  latest.current = options;
+
+  /* Started once the page has loaded and the browser is idle, so it never competes with
+     the first paint or hydration. Option changes go through update() below. */
   useEffect(() => {
-    ctl.current = acquireGlow(options);
-    return () => { ctl.current?.release(); ctl.current = null; };
-    // Started once; option changes go through update() below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    const start = () => {
+      if (cancelled) return;
+      const ric = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+      // The engine is its own chunk, fetched only now, so it costs nothing on the critical path.
+      const go = () => import("./glow/engine").then(({ acquireGlow }) => { if (!cancelled && !ctl.current) ctl.current = acquireGlow(latest.current); });
+      if (ric) ric(go, { timeout: 2000 }); else setTimeout(go, 200);
+    };
+    if (document.readyState === "complete") start(); else window.addEventListener("load", start, { once: true });
+    return () => { cancelled = true; window.removeEventListener("load", start); ctl.current?.release(); ctl.current = null; };
   }, []);
 
   useEffect(() => {

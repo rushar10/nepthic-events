@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listEvents } from "@/lib/events";
 import { EventCard } from "../EventCard";
+import { LoadMore } from "@/ui/ux/LoadMore";
 
 export const metadata = { title: "Past events" };
 
@@ -17,7 +18,7 @@ export default async function Past() {
         <Link className="tab" href="/past" aria-current="page">Past events<span className="count">{list.length}</span></Link>
         <Link className="tab" href="/tickets">My tickets</Link>
       </nav>
-      {list.length === 0 ? <div className="empty">No past events yet.</div> : <div className="ev-grid">{list.map((e) => <EventCard key={e.id} e={e} past />)}</div>}
+      {list.length === 0 ? <div className="empty">No past events yet.</div> : <LoadMore id="past" step={6} className="ev-grid" label="Load more nights">{list.map((e) => <EventCard key={e.id} e={e} past />)}</LoadMore>}
     </div>
   );
 }
