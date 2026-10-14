@@ -280,8 +280,9 @@ input[type=checkbox], input[type=radio] { width: 20px; height: 20px; accent-colo
 .bottom-nav a[aria-current="page"] .bn-icon { color: var(--link); }
 .bn-icon { position: relative; display: grid; place-items: center; }
 .bn-badge { position: absolute; top: -6px; right: -12px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: .66rem; font-family: var(--f-mono); display: grid; place-items: center; }
-body.has-bottom-nav main.wrap { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 32px); }
-body.has-bottom-nav .foot { display: none; }
+/* Phones: the footer (social links) sits above the bottom nav instead of being hidden. */
+body.has-bottom-nav main.wrap { padding-bottom: 32px; }
+body.has-bottom-nav .foot { padding-bottom: calc(var(--nav-h) + var(--safe-b)); }
 
 /* Sticky action bar: running totals / Continue / Pay, pinned above the bottom nav */
 .pinbar { position: sticky; bottom: calc(var(--nav-h) + var(--safe-b) + 8px); z-index: 20; display: flex; gap: 12px; align-items: center; justify-content: space-between;
@@ -375,7 +376,7 @@ body.has-bottom-nav .foot { display: none; }
   .desk { display: flex !important; }
   .mob, .bottom-nav { display: none !important; }
   body.has-bottom-nav main.wrap { padding-bottom: 60px; }
-  body.has-bottom-nav .foot { display: block; }
+  body.has-bottom-nav .foot { padding-bottom: 0; }
   .top { position: sticky; }
   .top[data-hidden="true"] { transform: none; }
   .carousel { grid-auto-flow: row; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); grid-auto-columns: unset; overflow: visible; margin-inline: 0; padding: 0; }
@@ -421,3 +422,4 @@ body.has-bottom-nav .foot { display: none; }
 .social svg { width: 22px; height: 22px; fill: currentColor; filter: drop-shadow(0 0 0 transparent); transition: filter .5s; }
 .social a:hover svg, .social a:focus-visible svg { filter: drop-shadow(0 0 5px var(--sc)); }
 @media (prefers-reduced-motion: reduce) { .social a, .social a::before, .social svg { transition: none; } }
+@media (max-width: 760px) { .foot-inner { flex-direction: column; align-items: flex-start; gap: 16px; } }
