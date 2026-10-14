@@ -4,11 +4,16 @@ import "@/ui/glow/glow.css";
 import type { Metadata, Viewport } from "next";
 import { SiteHeader, Footer } from "@/ui/SiteHeader";
 import { Proximity } from "@/ui/Proximity";
+import { Reveal } from "@/ui/Reveal";
 import { BottomNav, RegisterSW } from "@/ui/Mobile";
 import { getUser } from "@/core/auth";
 import { getSettings } from "@/core/settings";
 import { env } from "@/core/env";
 import { logout } from "@/app/actions/auth";
+
+// Every page reads this site's settings and session, so nothing is prerendered at build time
+// (the build never needs the database).
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: { default: "Nepthic Events", template: "%s · Nepthic Events" },
@@ -43,6 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </>
           ) : <a href="/login">Sign in</a>}
         />
+        <Reveal enabled={settings.proximityEnabled} strength={0.5} palette={[{ color: "#EC4899", x: 0.2, y: 0.4 }, { color: "#8B5CF6", x: 0.85, y: 0.12 }, { color: "#F472B6", x: 0.72, y: 0.82 }]} />
         <Proximity radius={settings.proximityRadius} intensity={settings.proximityIntensity} enabled={settings.proximityEnabled} />
         <RegisterSW signedIn={!!user} />
         <main className="wrap">{children}</main>

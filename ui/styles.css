@@ -423,3 +423,8 @@ body.has-bottom-nav .foot { padding-bottom: calc(var(--nav-h) + var(--safe-b)); 
 .social a:hover svg, .social a:focus-visible svg { filter: drop-shadow(0 0 5px var(--sc)); }
 @media (prefers-reduced-motion: reduce) { .social a, .social a::before, .social svg { transition: none; } }
 @media (max-width: 760px) { .foot-inner { flex-direction: column; align-items: flex-start; gap: 16px; } }
+
+/* Colour reveal (ui/Reveal.tsx): fixed canvas behind everything. */
+.reveal { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+/* body is the stacking context, so the canvas paints above its background but below content */
+body:has(> .reveal) { isolation: isolate; }
