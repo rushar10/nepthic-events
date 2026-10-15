@@ -10,6 +10,7 @@ import { CodeRangeError, eventFormat, initials, issueTickets } from "@/core/issu
 import { qrPng } from "@/core/tickets";
 import { codeKey, formatProblems, maxNumber, normalizeFormat, scopeKey, type CodeFormat } from "@/core/ticket-code-format";
 import { OpsError, actorId, actorNote, b, n, ok, s, type Actor, type Input, type Op } from "./kit";
+import { scanRows, scanSummary, SCAN_RESULTS } from "@/core/scan-log";
 
 /* ---------------------------------------------------------------------------
    Physical tickets, partners and ticket codes (admin API).
@@ -324,6 +325,17 @@ export const physicalOps: Record<string, Op> = {
   } },
 
   /* -------------------------------- tickets -------------------------------- */
+  /** The door log for one event: every scan, newest first, with its partner, gate and result. */
+  "scans.list": { level: "view", run: async (i) => {
+    const eventId = s(i, "eventId");
+    const summary = await scanSummary(eventId);
+    if (!summary.event) throw new OpsError("Event not found.", 404);
+    const page = Math.max(1, Math.min(1000, Math.floor(n(i, "page")) || 1)), size = 100;
+    const f = { eventId, partnerId: s(i, "partnerId"), gate: s(i, "gate"), result: s(i, "result"), method: s(i, "method"), q: s(i, "q") };
+    const rows = await scanRows(f, { limit: size + 1, offset: (page - 1) * size });
+    return { ...summary, results: SCAN_RESULTS, page, more: rows.length > size, scans: rows.slice(0, size) };
+  } },
+
   "tickets.search": { level: "view", run: async (i) => {
     const q = s(i, "q");
     const key = codeKey(q);

@@ -1,7 +1,7 @@
 import { claimsFrom } from "@/core/ops/token";
 import { accessFor, allowed } from "@/core/ops/perms";
 import { audit } from "@/core/audit";
-import { batchCsv, batchPdf, reportCsv, reportPdf, ticketsPdfById } from "@/core/exports";
+import { batchCsv, batchPdf, reportCsv, reportPdf, scansCsv, ticketsPdfById } from "@/core/exports";
 import type { PdfLayout } from "@/core/print";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,8 @@ export const maxDuration = 120;
      ?kind=batch&id=…&layout=stub|a4|thermal   print-ready PDF of a batch
      ?kind=tickets&ids=a,b&layout=…            PDF of chosen tickets (e.g. a reissue)
      ?kind=batch-csv&id=…                      ticket ids and serial numbers
-     ?kind=report&eventId=…&format=csv|pdf     partner report */
+     ?kind=report&eventId=…&format=csv|pdf     partner report
+     ?kind=scans&eventId=…[&partnerId&gate&result&method&q]  door log (CSV) */
 const notFound = () => new Response("Not found", { status: 404 });
 
 export async function GET(req: Request) {
@@ -24,6 +25,10 @@ export async function GET(req: Request) {
   if (kind === "batch") file = await batchPdf(u.searchParams.get("id") ?? "", layout);
   else if (kind === "tickets") file = await ticketsPdfById((u.searchParams.get("ids") ?? "").split(",").filter(Boolean).slice(0, 2000), layout);
   else if (kind === "batch-csv") file = await batchCsv(u.searchParams.get("id") ?? "");
+  else if (kind === "scans") {
+    const g = (k: string) => (u.searchParams.get(k) ?? "").slice(0, 80);
+    file = await scansCsv({ eventId: g("eventId"), partnerId: g("partnerId"), gate: g("gate"), result: g("result"), method: g("method"), q: g("q") });
+  }
   else if (kind === "report") file = u.searchParams.get("format") === "pdf" ? await reportPdf(u.searchParams.get("eventId") ?? "") : await reportCsv(u.searchParams.get("eventId") ?? "");
   if (!file) return notFound();
   await audit(`portal:${claims.sub}`, "export.downloaded", "Export", file.name, { by: claims.email, role: claims.role, kind });

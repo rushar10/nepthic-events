@@ -84,3 +84,17 @@ export async function reportPdf(eventId: string) {
 }
 
 
+
+/** The door log as CSV (all matching scans, up to 50,000). Times in Brisbane time. */
+export async function scansCsv(f: import("./scan-log").ScanFilters) {
+  const { scanRows, scanSummary } = await import("./scan-log");
+  const sum = await scanSummary(f.eventId);
+  if (!sum.event) return null;
+  const rows = await scanRows(f, { limit: 50000 });
+  const when = (d: Date) => d.toLocaleString("en-AU", { timeZone: "Australia/Brisbane", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).replace(",", "");
+  return {
+    name: `door-scans-${sum.event.name.replace(/[^A-Za-z0-9]+/g, "-").toLowerCase()}.csv`,
+    text: toCsv([["time_brisbane", "result", "gate", "method", "staff", "ticket_code", "typed_or_scanned", "holder", "ticket_type", "zone", "source", "partner_code", "partner_name"],
+      ...rows.map((r) => [when(r.at), r.result, r.gate, r.method, r.staff ?? "", r.ticketCode ?? "", r.typed ?? "", r.holder ?? "", r.type ?? "", r.zone ?? "", r.source ?? "", r.partnerCode ?? "", r.partnerName ?? ""])]),
+  };
+}
