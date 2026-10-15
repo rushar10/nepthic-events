@@ -29,8 +29,21 @@ let key: Promise<KeyLike> | null = null;
 /** Off unless PORTAL_PUBLIC_KEY is set (a PEM; "\n" escapes are accepted for one-line env files). */
 export const opsEnabled = () => !!process.env.PORTAL_PUBLIC_KEY;
 
+/** Rebuilds a PEM key from however it was pasted into a hosting dashboard: with or without the
+    surrounding quotes or the NAME= prefix, with real line breaks, "\\n" escapes or spaces. */
+export function toPem(raw: string, kind: "PRIVATE" | "PUBLIC", name: string): string {
+  let s = raw.trim().replace(/^([\'"])([\s\S]*)\1$/, "$2").replace(new RegExp(`^${name}\\s*=\\s*`), "");
+  s = s.trim().replace(/^([\'"])([\s\S]*)\1$/, "$2").replace(/\\n/g, "\n");
+  const other = kind === "PRIVATE" ? "PUBLIC" : "PRIVATE";
+  if (s.includes(`BEGIN ${other} KEY`)) throw new Error(`${name} holds the ${other.toLowerCase()} key. Paste the ${kind.toLowerCase()} key from "npm run keys" instead.`);
+  const body = s.replace(/-----(BEGIN|END)[^-]*-----/g, "").replace(/[^A-Za-z0-9+/=]/g, "");
+  if (!body) return "";
+  if (body.length < 60) throw new Error(`${name} is too short to be a key. Paste the whole ${kind.toLowerCase()} key from "npm run keys".`);
+  return `-----BEGIN ${kind} KEY-----\n${body.match(/.{1,64}/g)!.join("\n")}\n-----END ${kind} KEY-----\n`;
+}
+
 function publicKey() {
-  key ??= importSPKI((process.env.PORTAL_PUBLIC_KEY ?? "").trim().replace(/^([\'"])([\s\S]*)\1$/, "$2").replace(/\\n/g, "\n"), "EdDSA");
+  key ??= importSPKI(toPem(process.env.PORTAL_PUBLIC_KEY ?? "", "PUBLIC", "PORTAL_PUBLIC_KEY"), "EdDSA");
   return key;
 }
 
