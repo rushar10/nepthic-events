@@ -6,6 +6,11 @@
  * through a radial mask, and the loop sleeps once the circle settles. Touch: follows the
  * finger and fades on release. Reduced motion: no trailing.
  *
+ * Blending: the colour is mixed toward the page's own background first, and the canvas is
+ * composited with the page (screen on dark pages, multiply on light ones), so the reveal reads
+ * as light falling on the page rather than coloured lines laid over it. A soft wash of the same
+ * colour sits under the stitches so there are no hard edges around text.
+ *
  *   const stop = startReveal({ palette: [{ color: "#2DD4BF", x: .2, y: .4 }, …] });
  */
 export type RevealStop = { color: string; x: number; y: number };
@@ -30,6 +35,14 @@ export const REVEAL_DEFAULTS: RevealOptions = {
   strength: 1,
   base: 0.055,
 };
+/** "#rrggbb", "rgb(…)" or a CSS colour the browser resolved, to [r, g, b]. */
+function cssRgb(v: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(v.trim());
+  if (m) { const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  const r = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(v);
+  return r ? [Number(r[1]), Number(r[2]), Number(r[3])] : null;
+}
+const mix = (a: number[], b: number[], t: number) => a.map((v, i) => v + (b[i] - v) * t);
 const hex = (h: string): [number, number, number] => {
   const m = /^#?([0-9a-f]{6})$/i.exec(h.trim());
   const n = m ? parseInt(m[1], 16) : 0x8b5cf6;
@@ -81,14 +94,31 @@ export function startReveal(opts: Partial<RevealOptions> = {}): () => void {
      blocks input or the first paint. The texture fades in when it's ready. */
   let paintToken = 0;
   let painted = false;
+  /* The page's background colour (the --bg token, else the body's computed background). */
+  function pageBg(light: boolean): number[] {
+    const cs = getComputedStyle(document.documentElement);
+    return cssRgb(cs.getPropertyValue("--bg")) ?? cssRgb(getComputedStyle(document.body).backgroundColor) ?? (light ? [246, 243, 251] : [14, 11, 20]);
+  }
   function paint() {
     const token = ++paintToken;
     const light = isLight();
+    const bg = pageBg(light);
+    // Blend with the page rather than sit on top of it.
+    canvas.style.mixBlendMode = light ? "multiply" : "screen";
     dpr = Math.min(1.5, window.devicePixelRatio || 1);
     W = window.innerWidth; H = window.innerHeight;
     for (const c of [base, vivid, mask]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
     const b = base.getContext("2d")!, v = vivid.getContext("2d")!;
     for (const g of [b, v]) { g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H); g.lineCap = "round"; g.lineJoin = "round"; }
+    // A soft wash of the local colour under the stitches, in coarse tiles blurred together.
+    const tile = 48;
+    v.save(); v.filter = "blur(24px)";
+    for (let wy = -tile; wy < H + tile; wy += tile) for (let wx = -tile; wx < W + tile; wx += tile) {
+      const c = mix(colourAt(wx + tile / 2, wy + tile / 2), bg, light ? 0.35 : 0.25);
+      v.fillStyle = `rgba(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}, ${(light ? 0.16 : 0.12) * o.strength})`;
+      v.fillRect(wx, wy, tile, tile);
+    }
+    v.restore();
 
     const cw = 13, ch = 11;                 // stitch size, px
     let py = -ch;
@@ -102,13 +132,15 @@ export function startReveal(opts: Partial<RevealOptions> = {}): () => void {
         b.strokeStyle = light ? `rgba(40, 28, 64, ${o.base * 0.6 * lum})` : `rgba(214, 206, 230, ${o.base * lum})`;
         b.lineWidth = 2.1;
         b.beginPath(); b.moveTo(px + 1.5, top); b.quadraticCurveTo(cx - 2, bot - 3, cx, bot); b.quadraticCurveTo(cx + 2, bot - 3, px + cw - 1.5, top); b.stroke();
-        const [r, g, bl] = colourAt(cx, py);
-        const k = 0.55 + 0.75 * lum;
-        v.strokeStyle = `rgba(${Math.min(255, r * k) | 0}, ${Math.min(255, g * k) | 0}, ${Math.min(255, bl * k) | 0}, ${(0.5 + 0.4 * lum) * o.strength})`;
+        // Site colour, pulled toward the page background so it belongs to the page:
+        // softer pastel on light pages, a little deeper on dark ones.
+        const k = 0.8 + 0.35 * lum;
+        const [r, g, bl] = mix(colourAt(cx, py).map((c) => Math.min(255, c * k)), bg, light ? 0.3 : 0.18);
+        v.strokeStyle = `rgba(${r | 0}, ${g | 0}, ${bl | 0}, ${(0.38 + 0.3 * lum) * o.strength})`;
         v.lineWidth = 2.1;
         v.beginPath(); v.moveTo(px + 1.5, top); v.quadraticCurveTo(cx - 2, bot - 3, cx, bot); v.quadraticCurveTo(cx + 2, bot - 3, px + cw - 1.5, top); v.stroke();
         // a fine highlight on each leg, so the colour layer shimmers like yarn
-        v.strokeStyle = `rgba(255, 255, 255, ${(0.08 + 0.12 * lum) * o.strength})`;
+        v.strokeStyle = light ? `rgba(255, 255, 255, 0)` : `rgba(255, 255, 255, ${(0.05 + 0.08 * lum) * o.strength})`;
         v.lineWidth = 0.7;
         v.beginPath(); v.moveTo(px + 2.4, top + 0.6); v.quadraticCurveTo(cx - 2.6, bot - 3.6, cx - 0.6, bot - 0.8); v.stroke();
       }
