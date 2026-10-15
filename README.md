@@ -7,6 +7,7 @@
 ## Features
 - **Events.** Upcoming and past events, with ticket types and capacity.
 - **Checkout and My Tickets.** Signed QR e-tickets, offline access to tickets already opened, and optional Apple and Google Wallet passes.
+- **Designed tickets.** Each ticket shows in its event's design, made in the Admin Portal (Events → Ticket templates) and rendered by `core/ticket-design.ts`. That file is copied byte for byte into `portal/core/`, so the editor's preview matches. Customers can download their ticket as a PNG at `/tickets/<code>/download`, which only the buyer's account can do. The QR always sits on a white panel, so every design scans; `checks/camera-scan.py` proves this with a simulated phone camera.
 - **Door scanning** through the portal's scanner (`admin.nepthic.com/scan`), which checks each ticket here (`checkin.*` operations) and keeps working through short drops in connection.
 - **Refunds.** Buyers request one before the cut-off, and an admin approves it before any money moves.
 - **Admin, through the portal.** Dashboard, events, ticket types and capacity, refunds, check-in, customers, payments and settings (`core/ops/events.ts`).

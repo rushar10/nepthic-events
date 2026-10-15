@@ -1,8 +1,10 @@
 import { revalidatePath } from "next/cache";
 import {
   and, asc, db, desc, eq, events, gte, ilike, ne, or, payments, refundRequests, settings, sql, ticketOrders,
-  ticketTypes, tickets, users, type PaymentKind,
+  ticketTemplates, ticketTypes, tickets, users, type PaymentKind,
 } from "@/db";
+import { contrast, normalizeTemplate, type TicketFields } from "@/core/ticket-design";
+import { ensureDefault, listTemplates } from "@/core/ticket-templates";
 import { getSettings } from "@/core/settings";
 import { saveImages } from "@/core/uploads";
 import { refundPayment } from "@/core/payments";
@@ -160,6 +162,7 @@ export const ops: Record<string, Op> = {
       name, slug, status,
       description: s(i, "description"), venue: s(i, "venue"), address: s(i, "address"), city: s(i, "city"),
       startsAt: fromLocalInput(startsRaw), ageRestriction: s(i, "ageRestriction") || "18+", hue: clamp(n(i, "hue"), 0, 359),
+      ...(i.ticketTemplateId !== undefined ? { ticketTemplateId: await templateIdOrNull(s(i, "ticketTemplateId")) } : {}),
     };
     if (!values.venue || !values.city) throw new OpsError("Add the venue and city.");
     const cover = await saveImages(files.cover ?? [], actorId(a), { max: 1, isPublic: true });
@@ -235,6 +238,62 @@ export const ops: Record<string, Op> = {
     return ok(`${refundNo(r.number)} ${approve ? "refunded" : "rejected"}. ${r.user.name} has been emailed.`);
   } },
 
+  /* ------------------------ ticket templates ------------------------ */
+
+  "templates.list": { level: "view", run: async () => {
+    const list = await listTemplates();
+    const use = await db.select({ id: events.ticketTemplateId, n: sql<number>`count(*)::int` }).from(events).groupBy(events.ticketTemplateId);
+    const used = new Map(use.map((u) => [u.id, u.n]));
+    const def = list.find((t) => t.isDefault)!;
+    return {
+      templates: list.map((t) => ({ ...t, events: (used.get(t.id) ?? 0) + (t.isDefault ? used.get(null) ?? 0 : 0) })),
+      defaultId: def.id,
+    };
+  } },
+
+  "template.save": { level: "manage", run: async (i, a) => {
+    const id = s(i, "id");
+    const fin = (i.fields ?? {}) as Record<string, unknown>;
+    const fields = Object.fromEntries(FIELD_KEYS.map((k) => [k, b(fin, k)])) as TicketFields;
+    const design = normalizeTemplate({
+      name: s(i, "name"), layout: s(i, "layout") as never, pattern: s(i, "pattern") as never,
+      bg: s(i, "bg"), bg2: s(i, "bg2"), ink: s(i, "ink"), accent: s(i, "accent"),
+      brand: s(i, "brand"), headline: s(i, "headline"), finePrint: s(i, "finePrint"), fields,
+    });
+    if (!s(i, "name")) throw new OpsError("Name the template.");
+    const worst = Math.min(contrast(design.ink, design.bg), contrast(design.ink, design.bg2));
+    if (worst < 3) throw new OpsError(`The text colour is too close to the background (contrast ${worst.toFixed(1)}:1). Pick a lighter or darker text colour so the ticket stays readable.`);
+    if (id) {
+      const r = await db.update(ticketTemplates).set({ name: design.name, design, updatedAt: new Date() }).where(eq(ticketTemplates.id, id)).returning({ id: ticketTemplates.id });
+      if (!r.length) throw new OpsError("That template no longer exists.", 404);
+    }
+    const saved = id ? id : (await db.insert(ticketTemplates).values({ name: design.name, design }).returning({ id: ticketTemplates.id }))[0].id;
+    if (b(i, "makeDefault")) await setDefaultTemplate(saved);
+    await audit(actorId(a), id ? "ticket_template.updated" : "ticket_template.created", "TicketTemplate", saved, { ...actorNote(a), name: design.name, layout: design.layout });
+    fresh();
+    return ok(id ? `${design.name} saved. Tickets using it update straight away.` : `${design.name} created.`, { id: saved });
+  } },
+
+  "template.default": { level: "manage", run: async (i, a) => {
+    const t = await db.query.ticketTemplates.findFirst({ where: eq(ticketTemplates.id, s(i, "id")) });
+    if (!t) throw new OpsError("That template no longer exists.", 404);
+    await setDefaultTemplate(t.id);
+    await audit(actorId(a), "ticket_template.default", "TicketTemplate", t.id, { ...actorNote(a), name: t.name });
+    fresh();
+    return ok(`${t.name} is now the default ticket design.`);
+  } },
+
+  "template.delete": { level: "manage", run: async (i, a) => {
+    const t = await db.query.ticketTemplates.findFirst({ where: eq(ticketTemplates.id, s(i, "id")) });
+    if (!t) throw new OpsError("That template no longer exists.", 404);
+    if (t.isDefault) throw new OpsError("This is the default design. Make another template the default first.", 409);
+    const moved = await db.update(events).set({ ticketTemplateId: null }).where(eq(events.ticketTemplateId, t.id)).returning({ id: events.id });
+    await db.delete(ticketTemplates).where(eq(ticketTemplates.id, t.id));
+    await audit(actorId(a), "ticket_template.deleted", "TicketTemplate", t.id, { ...actorNote(a), name: t.name, events: moved.length });
+    fresh();
+    return ok(`${t.name} deleted.${moved.length ? ` ${moved.length} event${moved.length > 1 ? "s" : ""} now use${moved.length > 1 ? "" : "s"} the default design.` : ""}`);
+  } },
+
   "settings.save": { level: "manage", run: async (i, a) => {
     const values = {
       ticketRefundCutoffHours: clamp(n(i, "ticketRefundCutoffHours"), 0, 24 * 60),
@@ -250,3 +309,20 @@ export const ops: Record<string, Op> = {
     return ok("Settings saved. Customers see them on their next page load.");
   } },
 };
+
+const FIELD_KEYS: (keyof TicketFields)[] = ["date", "doors", "venue", "type", "price", "holder", "order"];
+
+async function templateIdOrNull(id: string) {
+  if (!id) return null;
+  const t = await db.query.ticketTemplates.findFirst({ where: eq(ticketTemplates.id, id), columns: { id: true } });
+  if (!t) throw new OpsError("That ticket template no longer exists.", 404);
+  return t.id;
+}
+
+async function setDefaultTemplate(id: string) {
+  await db.transaction(async (tx) => {
+    await tx.update(ticketTemplates).set({ isDefault: false }).where(eq(ticketTemplates.isDefault, true));
+    await tx.update(ticketTemplates).set({ isDefault: true }).where(eq(ticketTemplates.id, id));
+    await ensureDefault(tx);
+  });
+}

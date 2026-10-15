@@ -437,3 +437,7 @@ body.has-bottom-nav .foot { padding-bottom: calc(var(--nav-h) + var(--safe-b)); 
 .reveal { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
 /* body is the stacking context, so the canvas paints above its background but below content */
 body:has(> .reveal) { isolation: isolate; }
+
+/* Ticket in its event's design (ticket templates) */
+.ticket-design { width: 100%; max-width: 640px; filter: drop-shadow(0 18px 40px rgb(0 0 0 / .35)); }
+.ticket-design svg { width: 100%; height: auto; display: block; }

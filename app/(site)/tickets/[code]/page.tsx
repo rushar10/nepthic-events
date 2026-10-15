@@ -4,6 +4,7 @@ import { db, desc, eq, refundRequests, tickets } from "@/db";
 import { requireUser } from "@/core/auth";
 import { getSettings } from "@/core/settings";
 import { qrDataUrl } from "@/core/tickets";
+import { renderTicket } from "@/core/ticket-templates";
 import { aud, dateLong, dateShort, refundNo, time } from "@/ui/format";
 import { Status } from "@/ui/Status";
 import { ActionForm, Submit } from "@/ui/Forms";
@@ -25,6 +26,7 @@ export default async function TicketPage({ params }: { params: Promise<{ code: s
   const settings = await getSettings();
   const dead = t.status === "REFUNDED" || t.status === "VOID";
   const qr = dead ? null : await qrDataUrl(t.code, 480);
+  const design = await renderTicket(t);
   const cutoff = new Date(t.event.startsAt.getTime() - settings.ticketRefundCutoffHours * 3600e3);
   const canRefund = t.status === "VALID" && new Date() < cutoff;
   const latest = t.refundRequests[0];
@@ -33,8 +35,12 @@ export default async function TicketPage({ params }: { params: Promise<{ code: s
     <div className="split" style={{ alignItems: "start" }}>
       <div className="stack">
         <Link className="btn btn-ghost btn-sm" href="/tickets" style={{ justifySelf: "start" }}>← My tickets</Link>
-        <div className={`qr big${dead ? " void" : ""}`}>{qr && <img src={qr} alt={`QR code for ticket ${t.code}`} />}</div>
-        <p className="code" style={{ fontSize: "1.1rem" }}>{t.code}</p>
+        {/* The ticket in its event's design (made in the Admin Portal). Rendered on the server from our own
+            template renderer, which escapes every value; the QR always sits on a white panel so it scans. */}
+        <div className="ticket-design" dangerouslySetInnerHTML={{ __html: design }} />
+        <div className="row">
+          <a className="btn prox" href={`/tickets/${encodeURIComponent(t.code)}/download`} download><Icon name="arrow" /> Download ticket</a>
+        </div>
         {qr && (
           <div className="row">
             <FullScreenTicket qr={qr} code={t.code} eventName={t.event.name} holder={t.holderName} typeName={t.ticketType.name} />

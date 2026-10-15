@@ -64,8 +64,21 @@ export const events = pgTable("events", {
   coverUploadId: text("cover_upload_id"),
   galleryIds: text("gallery_ids").array().notNull().default(sql`'{}'::text[]`),
   status: eventStatus("status").notNull().default("DRAFT"),
+  /** How this event's tickets look (null = the default template). */
+  ticketTemplateId: text("ticket_template_id").references(() => ticketTemplates.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
+
+/* Ticket designs, made in the Admin Portal (Events → Ticket templates). The design itself is
+   a small JSON object rendered by core/ticket-design.ts. One template is the default. */
+export const ticketTemplates = pgTable("ticket_templates", {
+  id: id(),
+  name: text("name").notNull(),
+  design: jsonb("design").notNull(),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: createdAt(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+}, (t) => [index("ticket_templates_default_idx").on(t.isDefault)]);
 
 export const ticketTypes = pgTable("ticket_types", {
   id: id(),
@@ -166,7 +179,10 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({ user: one(u
 export const paymentsRelations = relations(payments, ({ one }) => ({
   ticketOrder: one(ticketOrders, { fields: [payments.ticketOrderId], references: [ticketOrders.id] }),
 }));
-export const eventsRelations = relations(events, ({ many }) => ({ ticketTypes: many(ticketTypes), tickets: many(tickets), ticketOrders: many(ticketOrders) }));
+export const eventsRelations = relations(events, ({ one, many }) => ({
+  ticketTypes: many(ticketTypes), tickets: many(tickets), ticketOrders: many(ticketOrders),
+  ticketTemplate: one(ticketTemplates, { fields: [events.ticketTemplateId], references: [ticketTemplates.id] }),
+}));
 export const ticketTypesRelations = relations(ticketTypes, ({ one }) => ({ event: one(events, { fields: [ticketTypes.eventId], references: [events.id] }) }));
 export const ticketOrdersRelations = relations(ticketOrders, ({ one, many }) => ({
   user: one(users, { fields: [ticketOrders.userId], references: [users.id] }),
