@@ -19,10 +19,11 @@ import { SITE_KEY } from "./site";
    Anything else is answered with a plain 404, so the API doesn't reveal that it exists.
 --------------------------------------------------------------------------- */
 
-export type PortalRole = "SUPER" | "SITE_ADMIN" | "STAFF" | "DOOR";
-export type Claims = { sub: string; email: string; name: string; role: PortalRole; sites: string[]; jti: string; path?: string };
+export type PortalRole = "SUPER" | "SITE_ADMIN" | "STAFF" | "DOOR" | "PARTNER";
+/** `partner`: the partner code a PARTNER account belongs to (Events only). */
+export type Claims = { sub: string; email: string; name: string; role: PortalRole; sites: string[]; jti: string; path?: string; partner?: string };
 
-const ROLES: PortalRole[] = ["SUPER", "SITE_ADMIN", "STAFF", "DOOR"];
+const ROLES: PortalRole[] = ["SUPER", "SITE_ADMIN", "STAFF", "DOOR", "PARTNER"];
 let key: Promise<KeyLike> | null = null;
 
 /** Off unless PORTAL_PUBLIC_KEY is set (a PEM; "\n" escapes are accepted for one-line env files). */
@@ -63,6 +64,7 @@ export async function verifyPortalToken(token: string, audience = SITE_KEY): Pro
       sub: payload.sub, jti: payload.jti, role,
       email: String(nep.email ?? ""), name: String(nep.name ?? ""),
       sites: nep.sites.map(String), path: typeof nep.path === "string" ? nep.path : undefined,
+      partner: typeof nep.partner === "string" ? nep.partner : undefined,
     };
   } catch {
     return null;

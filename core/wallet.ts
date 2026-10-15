@@ -8,7 +8,7 @@ import { ticketPayload } from "./ticket-codes";
    credentials are set (see .env.example); until then the buttons are hidden.
    Both carry the same signed QR payload the door scanner validates. */
 
-export type WalletTicket = {
+export type WalletTicket = { qrId: string;
   code: string; holderName: string; typeName: string;
   event: { id: string; name: string; venue: string; city: string; startsAt: Date };
 };
@@ -50,7 +50,7 @@ export function googleWalletUrl(t: WalletTicket) {
         ticketHolderName: t.holderName,
         ticketType: local(t.typeName),
         ticketNumber: t.code,
-        barcode: { type: "QR_CODE", value: ticketPayload(t.code, env.ticketSecret), alternateText: t.code },
+        barcode: { type: "QR_CODE", value: ticketPayload(t.qrId, env.ticketSecret), alternateText: t.code },
       }],
     },
   };
@@ -93,7 +93,7 @@ export async function applePass(t: WalletTicket) {
         { key: "rules", label: "Entry", value: "One person, one scan. Refunds only after Nepthic approves a request in your account." },
       ],
     },
-    barcodes: [{ format: "PKBarcodeFormatQR", message: ticketPayload(t.code, env.ticketSecret), messageEncoding: "iso-8859-1", altText: t.code }],
+    barcodes: [{ format: "PKBarcodeFormatQR", message: ticketPayload(t.qrId, env.ticketSecret), messageEncoding: "iso-8859-1", altText: t.code }],
   };
   const pass = new PKPass(
     {

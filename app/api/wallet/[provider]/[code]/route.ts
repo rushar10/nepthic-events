@@ -8,8 +8,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ provider: 
   const { provider, code } = await params;
   const user = await getUser();
   const t = user && await db.query.tickets.findFirst({ where: eq(tickets.code, decodeURIComponent(code)), with: { ticketOrder: true, ticketType: true, event: true } });
-  if (!t || t.ticketOrder.userId !== user!.id || t.status === "REFUNDED" || t.status === "VOID") return new Response("Not found", { status: 404 });
-  const wt: WalletTicket = { code: t.code, holderName: t.holderName, typeName: t.ticketType.name, event: t.event };
+  if (!t || t.ticketOrder?.userId !== user!.id || t.status === "REFUNDED" || t.status === "VOID") return new Response("Not found", { status: 404 });
+  const wt: WalletTicket = { code: t.code, qrId: t.qrId, holderName: t.holderName, typeName: t.ticketType.name, event: t.event };
 
   if (provider === "google" && walletConfig.google) return Response.redirect(googleWalletUrl(wt), 302);
   if (provider === "apple" && walletConfig.apple) {

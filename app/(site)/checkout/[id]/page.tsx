@@ -43,11 +43,20 @@ export default async function Confirmation({ params }: { params: Promise<{ id: s
       <section className="hero">
         <p className="eyebrow">Payment received · {aud(o.totalCents)}</p>
         <h1>You&apos;re in.</h1>
-        <p className="lede">{o.tickets.length} e-ticket{o.tickets.length > 1 ? "s" : ""} for {o.event.name}. We&apos;ve emailed {o.tickets.length > 1 ? "them" : "it"} to {o.buyerEmail}. Show one QR code per person at the door.</p>
+        <p className="lede">{o.tickets.length} {o.format === "PHYSICAL" ? "physical ticket" : "ticket"}{o.tickets.length > 1 ? "s" : ""} for {o.event.name}. {o.format === "PHYSICAL" ? `We've emailed your order confirmation to ${o.buyerEmail}.` : `We've emailed ${o.tickets.length > 1 ? "them" : "it"} to ${o.buyerEmail}. Show one QR code per person at the door.`}</p>
       </section>
+      {o.format !== "ETICKET" && (
+        <div className="note">
+          <b>Physical ticket{o.tickets.length > 1 ? "s" : ""} · {o.delivery === "POST" ? "tracked post" : "pickup at the box office"}</b>
+          <p className="small" style={{ marginTop: 4 }}>{o.delivery === "POST"
+            ? <>We&apos;ll post {o.tickets.length > 1 ? "them" : "it"} to {o.shipTo} within 2 business days and email the tracking number.{o.tracking ? ` Tracking: ${o.tracking}.` : ""}</>
+            : <>Collect {o.tickets.length > 1 ? "them" : "it"} from the {o.event.venue} box office on the night with photo ID and order TO-{o.number}.</>}
+            {o.format === "BOTH" && " Your e-ticket below works too: they share one QR, so whichever is scanned first gets in."}</p>
+        </div>
+      )}
       <Stagger id={`confirm-${o.id}`} className="tickets">
         {o.tickets.map((t) => (
-          <TicketCard key={t.id} code={t.code} status={t.status} holderName={t.holderName} checkedInAt={t.checkedInAt} typeName={t.ticketType.name} event={o.event} />
+          <TicketCard key={t.id} code={t.code} qrId={t.qrId} status={t.status} holderName={t.holderName} checkedInAt={t.checkedInAt} typeName={t.ticketType.name} event={o.event} />
         ))}
       </Stagger>
       <div className="row"><Link className="btn prox" href="/tickets">All my tickets</Link><Link className="btn btn-ghost" href="/">More events</Link></div>

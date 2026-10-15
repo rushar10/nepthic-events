@@ -6,7 +6,7 @@ const config: NextConfig = {
   // Put <title>/<meta description> in the <head> for every client (not streamed), so link
   // previews and audits always see them. Our data is fast, so this costs nothing noticeable.
   htmlLimitedBots: /.*/,
-  serverExternalPackages: ["sharp", "passkit-generator"],
+  serverExternalPackages: ["sharp", "passkit-generator", "pdfkit", "svg-to-pdfkit"],
   experimental: { serverActions: { bodySizeLimit: "32mb" } },
   async headers() {
     return [{

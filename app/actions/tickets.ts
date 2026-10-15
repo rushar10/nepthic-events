@@ -9,6 +9,7 @@ import { emails } from "@/core/email";
 import { audit } from "@/core/audit";
 import { env } from "@/core/env";
 import { int, str, type FormState } from "@/core/forms";
+import { activePartnerFor, POST_CUTOFF_DAYS, POST_FEE_CENTS, referralPartner } from "@/core/referral";
 
 export async function startTicketCheckout(_: FormState, fd: FormData): Promise<FormState> {
   const eventId = str(fd, "eventId");
@@ -24,7 +25,24 @@ export async function startTicketCheckout(_: FormState, fd: FormData): Promise<F
   if (count === 0) return { error: "Choose at least one ticket." };
   if (count > settings.maxTicketsPerOrder) return { error: `You can buy up to ${settings.maxTicketsPerOrder} tickets per order.` };
   const buyerName = str(fd, "buyerName") || user.name;
-  const totalCents = lines.reduce((a, l) => a + l.quantity * l.priceCents, 0);
+  // Ticket format and, for physical tickets, delivery.
+  const format = (["ETICKET", "PHYSICAL", "BOTH"] as const).find((f) => f === str(fd, "format")) ?? "ETICKET";
+  if (!event.ticketFormats.includes(format)) return { error: "That ticket format isn't offered for this event." };
+  let delivery: "PICKUP" | "POST" | null = null, shipTo: string | null = null, deliveryFeeCents = 0;
+  if (format !== "ETICKET") {
+    delivery = str(fd, "delivery") === "POST" ? "POST" : "PICKUP";
+    if (delivery === "POST") {
+      if (event.startsAt.getTime() - Date.now() < POST_CUTOFF_DAYS * 864e5) return { error: `Posting closes ${POST_CUTOFF_DAYS} days before the event. Choose pickup at the box office.` };
+      shipTo = str(fd, "shipTo").slice(0, 300);
+      if (shipTo.length < 10) return { error: "Add the full postal address for your tickets." };
+      deliveryFeeCents = POST_FEE_CENTS;
+    }
+  }
+  // Partner attribution: a typed partner code wins over a referral link.
+  const typed = str(fd, "partnerCode");
+  const partner = typed ? await activePartnerFor(typed) : await referralPartner();
+  if (typed && !partner) return { error: "That partner code isn't valid. Check it, or leave it blank." };
+  const totalCents = lines.reduce((a, l) => a + l.quantity * l.priceCents, 0) + deliveryFeeCents;
 
   let orderId: string;
   try {
@@ -32,6 +50,7 @@ export async function startTicketCheckout(_: FormState, fd: FormData): Promise<F
       await reserveSeats(tx, lines);
       const [o] = await tx.insert(ticketOrders).values({
         userId: user.id, eventId: event.id, buyerName, buyerEmail: user.email, items: lines, totalCents,
+        format, delivery, shipTo, deliveryFeeCents, partnerId: partner?.id ?? null,
       }).returning({ id: ticketOrders.id });
       return o.id;
     });
@@ -43,7 +62,7 @@ export async function startTicketCheckout(_: FormState, fd: FormData): Promise<F
   const url = await startCheckout({
     kind: "TICKET",
     amountCents: totalCents,
-    description: `${event.name} · ${count} ticket${count > 1 ? "s" : ""}`,
+    description: `${event.name} · ${count} ${format === "ETICKET" ? "e-ticket" : format === "PHYSICAL" ? "physical ticket" : "ticket (e-ticket + physical)"}${count > 1 ? "s" : ""}${delivery === "POST" ? " · tracked post" : delivery === "PICKUP" ? " · box office pickup" : ""}`,
     email: user.email,
     ticketOrderId: orderId,
     successUrl: `${env.siteUrl}/checkout/${orderId}`,
@@ -56,7 +75,7 @@ export async function requestRefund(_: FormState, fd: FormData): Promise<FormSta
   const user = await requireUser(undefined, "/login?next=/tickets");
   const code = str(fd, "code");
   const t = await db.query.tickets.findFirst({ where: eq(tickets.code, code), with: { ticketOrder: true, ticketType: true, event: true } });
-  if (!t || t.ticketOrder.userId !== user.id) return { error: "We couldn't find that ticket on your account." };
+  if (!t || t.ticketOrder?.userId !== user.id) return { error: "We couldn't find that ticket on your account." };
   if (t.status !== "VALID") return { error: "This ticket can't be refunded in its current state." };
   const settings = await getSettings();
   const cutoff = new Date(t.event.startsAt.getTime() - settings.ticketRefundCutoffHours * 3600e3);

@@ -19,6 +19,14 @@ export const eventStatus = pgEnum("event_status", ["DRAFT", "PUBLISHED", "CANCEL
 export const ticketOrderStatus = pgEnum("ticket_order_status", ["PENDING", "PAID", "CANCELLED"]);
 export const ticketStatus = pgEnum("ticket_status", ["VALID", "USED", "REFUND_REQUESTED", "REFUNDED", "VOID"]);
 export const refundStatus = pgEnum("refund_status", ["PENDING", "APPROVED", "REJECTED"]);
+/* Physical tickets and partners */
+export const ticketFormat = pgEnum("ticket_format", ["ETICKET", "PHYSICAL", "BOTH"]);
+export const ticketSource = pgEnum("ticket_source", ["ONLINE", "BOX_OFFICE", "PARTNER"]);
+/** Physical stock lifecycle. Null for e-tickets. Validity (VALID/USED/VOID…) is `status`. */
+export const physicalStage = pgEnum("physical_stage", ["GENERATED", "PRINTED", "DISTRIBUTED", "SOLD"]);
+export const partnerStatus = pgEnum("partner_status", ["ACTIVE", "SUSPENDED"]);
+export const allocationKind = pgEnum("allocation_kind", ["PHYSICAL", "ETICKET", "LINK"]);
+export const deliveryMethod = pgEnum("delivery_method", ["PICKUP", "POST"]);
 
 export type Role = (typeof role.enumValues)[number];
 export type PaymentKind = (typeof paymentKind.enumValues)[number];
@@ -66,6 +74,12 @@ export const events = pgTable("events", {
   status: eventStatus("status").notNull().default("DRAFT"),
   /** How this event's tickets look (null = the default template). */
   ticketTemplateId: text("ticket_template_id").references(() => ticketTemplates.id, { onDelete: "set null" }),
+  /** Ticket code format (core/ticket-code-format.ts). Null = the default. Applies to new tickets only. */
+  codeFormat: jsonb("code_format"),
+  /** What customers may choose at checkout. */
+  ticketFormats: ticketFormat("ticket_formats").array().notNull().default(sql`'{ETICKET,PHYSICAL,BOTH}'::ticket_format[]`),
+  /** Door/gate names offered in the scanner. */
+  gates: text("gates").array().notNull().default(sql`'{Main}'::text[]`),
   createdAt: createdAt(),
 });
 
@@ -88,6 +102,10 @@ export const ticketTypes = pgTable("ticket_types", {
   capacity: integer("capacity").notNull(),
   sold: integer("sold").notNull().default(0), // includes seats held by unpaid checkouts
   sortOrder: integer("sort_order").notNull().default(0),
+  /** Default ticket-type part of the code prefix, e.g. VIP, GA, EB. */
+  codePrefix: text("code_prefix").notNull().default(""),
+  /** Seat/zone printed on tickets, if the venue uses them. */
+  zone: text("zone").notNull().default(""),
 });
 
 export const ticketOrders = pgTable("ticket_orders", {
@@ -100,21 +118,127 @@ export const ticketOrders = pgTable("ticket_orders", {
   buyerEmail: text("buyer_email").notNull(),
   items: jsonb("items").$type<TicketLine[]>().notNull(),
   totalCents: integer("total_cents").notNull(),
+  /** E-ticket, physical or both (chosen at checkout). */
+  format: ticketFormat("format").notNull().default("ETICKET"),
+  delivery: deliveryMethod("delivery"),
+  deliveryFeeCents: integer("delivery_fee_cents").notNull().default(0),
+  shipTo: text("ship_to"),
+  shippedAt: ts("shipped_at"),
+  tracking: text("tracking"),
+  pickedUpAt: ts("picked_up_at"),
+  /** Partner whose referral link or code brought this order. */
+  partnerId: text("partner_id").references(() => partners.id),
   createdAt: createdAt(),
 });
 
 export const tickets = pgTable("tickets", {
   id: id(),
+  /** The readable code printed under the QR and typed at the door (format set per event). */
   code: text("code").notNull().unique(),
-  ticketOrderId: text("ticket_order_id").notNull().references(() => ticketOrders.id),
+  /** The code without separators or spaces, so typed codes match however they're written. */
+  codeKey: text("code_key").notNull().unique(),
+  /** Random id carried (signed) in the QR. Never printed, so a guessed readable code can't make a valid QR. */
+  qrId: text("qr_id").notNull().unique(),
+  /** The number part of the code (serial number on printed tickets). */
+  serial: integer("serial"),
+  ticketOrderId: text("ticket_order_id").references(() => ticketOrders.id),
   ticketTypeId: text("ticket_type_id").notNull().references(() => ticketTypes.id),
   eventId: text("event_id").notNull().references(() => events.id),
   holderName: text("holder_name").notNull(),
+  /** For tickets issued by a partner or the box office to a buyer without an account. */
+  buyerEmail: text("buyer_email"),
   status: ticketStatus("status").notNull().default("VALID"),
+  format: ticketFormat("format").notNull().default("ETICKET"),
+  stage: physicalStage("stage"),
+  source: ticketSource("source").notNull().default("ONLINE"),
+  partnerId: text("partner_id").references(() => partners.id),
+  allocationId: text("allocation_id").references(() => allocations.id),
+  batchId: text("batch_id").references(() => printBatches.id),
+  /** Face value when issued (revenue and commission). */
+  priceCents: integer("price_cents").notNull().default(0),
+  soldAt: ts("sold_at"),
+  printedAt: ts("printed_at"),
   checkedInAt: ts("checked_in_at"),
   checkedInById: text("checked_in_by_id"),
+  checkedInGate: text("checked_in_gate"),
+  voidReason: text("void_reason"),
+  reissuedFromId: text("reissued_from_id"),
   createdAt: createdAt(),
-}, (t) => [index("tickets_event_status_idx").on(t.eventId, t.status)]);
+}, (t) => [
+  index("tickets_event_status_idx").on(t.eventId, t.status),
+  index("tickets_partner_idx").on(t.partnerId),
+  index("tickets_batch_idx").on(t.batchId),
+]);
+
+/* Partners: resellers, venues, promoters, sponsors and outlets that sell Nepthic tickets. */
+export const partners = pgTable("partners", {
+  id: id(),
+  name: text("name").notNull(),
+  /** Short code printed on their tickets and used in ticket codes, e.g. P012. */
+  code: text("code").notNull().unique(),
+  kind: text("kind").notNull().default("RESELLER"),
+  contactName: text("contact_name").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  /** Badge colour shown in the scanner. */
+  color: text("color").notNull().default("#8B5CF6"),
+  commissionPct: real("commission_pct").notNull().default(0),
+  paymentTerms: text("payment_terms").notNull().default(""),
+  /** For their referral link (?ref=…) and promo code. */
+  referralCode: text("referral_code").notNull().unique(),
+  status: partnerStatus("status").notNull().default("ACTIVE"),
+  createdAt: createdAt(),
+});
+
+/* Tickets set aside for a partner at one event. */
+export const allocations = pgTable("allocations", {
+  id: id(),
+  eventId: text("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  partnerId: text("partner_id").notNull().references(() => partners.id),
+  ticketTypeId: text("ticket_type_id").notNull().references(() => ticketTypes.id),
+  kind: allocationKind("kind").notNull(),
+  quantity: integer("quantity").notNull(),
+  /** Reserved number range for this allocation's codes (inclusive), optional. */
+  rangeStart: integer("range_start"),
+  rangeEnd: integer("range_end"),
+  revokedAt: ts("revoked_at"),
+  createdAt: createdAt(),
+}, (t) => [index("allocations_event_idx").on(t.eventId), check("allocations_qty_positive", sql`${t.quantity} > 0`)]);
+
+/* One bulk run of physical tickets ("Generate 500 VIP for Event X"). */
+export const printBatches = pgTable("print_batches", {
+  id: id(),
+  number: serial("number").notNull().unique(),
+  eventId: text("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  ticketTypeId: text("ticket_type_id").notNull().references(() => ticketTypes.id),
+  partnerId: text("partner_id").references(() => partners.id),
+  allocationId: text("allocation_id").references(() => allocations.id),
+  quantity: integer("quantity").notNull(),
+  printFormat: text("print_format").notNull().default("A4"),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+});
+
+/* Next number per code sequence (per event; or per ticket type / partner, depending on the format). */
+export const codeCounters = pgTable("code_counters", {
+  eventId: text("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  scopeKey: text("scope_key").notNull(),
+  next: integer("next").notNull(),
+}, (t) => [primaryKey({ columns: [t.eventId, t.scopeKey] })]);
+
+/* Every scan at the door, admitted or not (reports, timelines and suspicious-activity alerts). */
+export const scans = pgTable("scans", {
+  id: id(),
+  eventId: text("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  ticketId: text("ticket_id").references(() => tickets.id),
+  code: text("code"),
+  gate: text("gate").notNull().default("Main"),
+  result: text("result").notNull(),
+  method: text("method").notNull().default("CAMERA"),
+  partnerId: text("partner_id"),
+  staff: text("staff"),
+  at: ts("at").notNull().defaultNow(),
+}, (t) => [index("scans_event_at_idx").on(t.eventId, t.at)]);
 
 export const refundRequests = pgTable("refund_requests", {
   id: id(),
@@ -190,6 +314,8 @@ export const ticketOrdersRelations = relations(ticketOrders, ({ one, many }) => 
   tickets: many(tickets), payments: many(payments),
 }));
 export const ticketsRelations = relations(tickets, ({ one, many }) => ({
+  partner: one(partners, { fields: [tickets.partnerId], references: [partners.id] }),
+  allocation: one(allocations, { fields: [tickets.allocationId], references: [allocations.id] }),
   ticketOrder: one(ticketOrders, { fields: [tickets.ticketOrderId], references: [ticketOrders.id] }),
   ticketType: one(ticketTypes, { fields: [tickets.ticketTypeId], references: [ticketTypes.id] }),
   event: one(events, { fields: [tickets.eventId], references: [events.id] }),
@@ -219,3 +345,17 @@ export const adminPreviews = pgTable("admin_previews", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: createdAt(),
 });
+
+export const partnersRelations = relations(partners, ({ many }) => ({ allocations: many(allocations), tickets: many(tickets) }));
+export const allocationsRelations = relations(allocations, ({ one, many }) => ({
+  partner: one(partners, { fields: [allocations.partnerId], references: [partners.id] }),
+  event: one(events, { fields: [allocations.eventId], references: [events.id] }),
+  ticketType: one(ticketTypes, { fields: [allocations.ticketTypeId], references: [ticketTypes.id] }),
+  tickets: many(tickets),
+}));
+export const printBatchesRelations = relations(printBatches, ({ one, many }) => ({
+  event: one(events, { fields: [printBatches.eventId], references: [events.id] }),
+  ticketType: one(ticketTypes, { fields: [printBatches.ticketTypeId], references: [ticketTypes.id] }),
+  partner: one(partners, { fields: [printBatches.partnerId], references: [partners.id] }),
+  tickets: many(tickets),
+}));

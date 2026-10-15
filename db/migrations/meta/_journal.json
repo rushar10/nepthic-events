@@ -29,6 +29,27 @@
       "when": 1792034864117,
       "tag": "0003_ticket_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792039092470,
+      "tag": "0004_physical_partners",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792040577113,
+      "tag": "0005_sold_at_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792040602608,
+      "tag": "0006_code_key_fold",
+      "breakpoints": true
     }
   ]
 }

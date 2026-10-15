@@ -22,10 +22,10 @@ export default async function TicketPage({ params }: { params: Promise<{ code: s
     where: eq(tickets.code, decodeURIComponent(code)),
     with: { ticketOrder: true, ticketType: true, event: true, refundRequests: { orderBy: desc(refundRequests.createdAt) } },
   });
-  if (!t || t.ticketOrder.userId !== user.id) notFound();
+  if (!t || t.ticketOrder?.userId !== user.id) notFound();
   const settings = await getSettings();
   const dead = t.status === "REFUNDED" || t.status === "VOID";
-  const qr = dead ? null : await qrDataUrl(t.code, 480);
+  const qr = dead ? null : await qrDataUrl(t.qrId, 480);
   const design = await renderTicket(t);
   const cutoff = new Date(t.event.startsAt.getTime() - settings.ticketRefundCutoffHours * 3600e3);
   const canRefund = t.status === "VALID" && new Date() < cutoff;

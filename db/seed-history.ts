@@ -1,3 +1,4 @@
+import { newQrId } from "../core/ticket-codes";
 /* Twelve months of sample ticket sales for local development, so the Events dashboard has
    something to show. Runs once (marked in audit_log), never in production, and can be
    skipped with SEED_SAMPLE_HISTORY=0. */
@@ -107,7 +108,8 @@ export async function seedSampleHistory(passwordHash: string) {
         toRows.push({ id, userId: buyer.id, eventId: ev.id, status: "PAID", buyerName: buyer.name, buyerEmail: buyer.email, items: [line], totalCents: total, createdAt: created });
         payRows.push({ kind: "TICKET", status: "SUCCEEDED", amountCents: total, description: `${ev.name} · ${qty} × ${tt.name}`, ticketOrderId: id, paidAt: created, createdAt: created });
         for (let q = 0; q < qty; q++) {
-          tkRows.push({ code: code(), ticketOrderId: id, ticketTypeId: tt.id, eventId: ev.id, holderName: buyer.name,
+          const c = code();
+          tkRows.push({ code: c, codeKey: c.replace(/[^A-Z0-9]/g, ""), qrId: newQrId(), priceCents: tt.priceCents, soldAt: created, ticketOrderId: id, ticketTypeId: tt.id, eventId: ev.id, holderName: buyer.name,
             status: isPast ? (R() < 0.97 ? "USED" : "VALID") : "VALID", checkedInAt: isPast ? ev.startsAt : null, createdAt: created });
         }
         soldBy.set(tt.id, (soldBy.get(tt.id) ?? 0) + qty);

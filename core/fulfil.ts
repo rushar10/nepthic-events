@@ -1,6 +1,7 @@
-import { and, db, eq, payments, ticketOrders, tickets } from "@/db";
+import { and, db, eq, partners, payments, ticketOrders } from "@/db";
 import { emails } from "./email";
-import { newTicketCode, qrPng, releaseSeats } from "./tickets";
+import { qrPng, releaseSeats } from "./tickets";
+import { issueTickets } from "./issue";
 
 /* Runs once per successful payment (Stripe webhook or mock). Idempotent: a payment that
    is no longer PENDING is skipped, so Stripe retries are harmless. */
@@ -16,18 +17,21 @@ export async function fulfilPayment(sessionId: string, paymentIntentId?: string)
     if (flipped.length !== 1) return null;
 
     if (payment.ticketOrderId) {
-      const to = await tx.query.ticketOrders.findFirst({ where: eq(ticketOrders.id, payment.ticketOrderId), with: { event: true } });
+      const to = await tx.query.ticketOrders.findFirst({ where: eq(ticketOrders.id, payment.ticketOrderId), with: { event: { with: { ticketTypes: true } } } });
       if (!to || to.status !== "PENDING") return null;
-      const codes: string[] = [];
+      const partner = to.partnerId ? await tx.query.partners.findFirst({ where: eq(partners.id, to.partnerId) }) : null;
+      const issued: { code: string; qrId: string }[] = [];
       for (const l of to.items) {
-        for (let i = 0; i < l.quantity; i++) {
-          const code = newTicketCode();
-          codes.push(code);
-          await tx.insert(tickets).values({ code, ticketOrderId: to.id, ticketTypeId: l.typeId, eventId: to.eventId, holderName: to.buyerName });
-        }
+        const type = to.event.ticketTypes.find((t) => t.id === l.typeId)!;
+        // Physical (and "both") tickets bought online are already sold; one ticket id serves both forms.
+        issued.push(...await issueTickets(tx, {
+          event: to.event, type, count: l.quantity, holderName: to.buyerName, buyerEmail: to.buyerEmail, orderId: to.id,
+          format: to.format, stage: to.format === "ETICKET" ? null : "SOLD", sold: true,
+          source: partner ? "PARTNER" : "ONLINE", partner: partner ? { id: partner.id, code: partner.code } : null,
+        }));
       }
       await tx.update(ticketOrders).set({ status: "PAID" }).where(eq(ticketOrders.id, to.id));
-      return { to: to.buyerEmail, event: to.event, codes };
+      return { to: to.buyerEmail, event: to.event, codes: issued.map((t) => t.code), qrIds: issued.map((t) => t.qrId) };
     }
     return null;
   });
@@ -37,7 +41,7 @@ export async function fulfilPayment(sessionId: string, paymentIntentId?: string)
     const when = after.event.startsAt.toLocaleString("en-AU", {
       weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", timeZone: "Australia/Brisbane",
     });
-    const pngs = await Promise.all(after.codes.map((c) => qrPng(c)));
+    const pngs = await Promise.all(after.qrIds.map((q) => qrPng(q)));
     await emails.ticketsIssued(after.to, after.event.name, `${when} · ${after.event.venue}, ${after.event.city}`, after.codes, pngs);
   }
 }

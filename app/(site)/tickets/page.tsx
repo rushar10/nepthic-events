@@ -33,14 +33,14 @@ export default async function MyTickets() {
       {all.length === 0 && <div className="empty">No tickets yet. <Link href="/">See what&apos;s on</Link>.</div>}
       {upcoming.length > 0 && (
         <div className="tickets">
-          {upcoming.map((t) => <TicketCard key={t.id} code={t.code} status={t.status} holderName={t.holderName} checkedInAt={t.checkedInAt} typeName={t.ticketType.name} event={t.event} />)}
+          {upcoming.map((t) => <TicketCard key={t.id} code={t.code} qrId={t.qrId} status={t.status} holderName={t.holderName} checkedInAt={t.checkedInAt} typeName={t.ticketType.name} event={t.event} />)}
         </div>
       )}
       {past.length > 0 && (
         <section className="stack-sm">
           <h2 className="h3">Past</h2>
           <div className="tickets">
-            {past.map((t) => <TicketCard key={t.id} code={t.code} status={t.status} holderName={t.holderName} checkedInAt={t.checkedInAt} typeName={t.ticketType.name} event={t.event} />)}
+            {past.map((t) => <TicketCard key={t.id} code={t.code} qrId={t.qrId} status={t.status} holderName={t.holderName} checkedInAt={t.checkedInAt} typeName={t.ticketType.name} event={t.event} />)}
           </div>
         </section>
       )}

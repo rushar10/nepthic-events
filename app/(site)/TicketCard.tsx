@@ -4,14 +4,14 @@ import { dateLong, time } from "@/ui/format";
 import { Status } from "@/ui/Status";
 
 type Props = {
-  code: string; status: string; holderName: string; checkedInAt: Date | null;
+  code: string; qrId: string; status: string; holderName: string; checkedInAt: Date | null;
   typeName: string; event: { name: string; startsAt: Date; venue: string };
   link?: boolean;
 };
 
-export async function TicketCard({ code, status, holderName, checkedInAt, typeName, event, link = true }: Props) {
+export async function TicketCard({ code, qrId, status, holderName, checkedInAt, typeName, event, link = true }: Props) {
   const dead = status === "REFUNDED" || status === "VOID";
-  const qr = dead ? null : await qrDataUrl(code, 240);
+  const qr = dead ? null : await qrDataUrl(qrId, 240);
   const body = (
     <>
       <div className={`qr${dead ? " void" : ""}`}>{qr ? <img src={qr} alt={`QR code for ticket ${code}`} /> : null}</div>

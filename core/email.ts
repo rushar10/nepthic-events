@@ -45,7 +45,7 @@ export const emails = {
         p(when) + p(`Your e-ticket${codes.length > 1 ? "s are" : " is"} attached as QR code images. Show one per person at the door.`) +
           p(codes.map((c) => `<code style="font-size:14px">${c}</code>`).join("<br>")),
         { label: "Open my tickets", href: `${env.siteUrl}/tickets` }),
-      pngs.map((content, i) => ({ filename: `${codes[i]}.png`, content }))),
+      pngs.map((content, i) => ({ filename: `${codes[i].replace(/[^A-Za-z0-9-]/g, "-")}.png`, content }))),
 
   refundRequested: (to: string, n: number, eventName: string) =>
     sendEmail(to, `Refund request RF-${n} received`, layout("Refund request received",

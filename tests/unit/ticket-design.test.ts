@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { contrast, DEFAULT_TEMPLATE, LAYOUTS, normalizeTemplate, PRESETS, SAMPLE_DATA, ticketSvg } from "../../core/ticket-design";
 
 test("templates from forms are cleaned: bad colours, layouts and long text fall back or are cut", () => {
-  const t = normalizeTemplate({ name: "  X  ", layout: "nope" as never, bg: "red", ink: "#ffffff", brand: "B".repeat(99), fields: { price: true } });
+  const t = normalizeTemplate({ name: "  X  ", layout: "nope" as never, bg: "red", ink: "#ffffff", brand: "B".repeat(99), fields: { price: true } as never });
   assert.equal(t.name, "X");
   assert.equal(t.layout, DEFAULT_TEMPLATE.layout);
   assert.equal(t.bg, DEFAULT_TEMPLATE.bg);

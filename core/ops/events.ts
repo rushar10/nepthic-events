@@ -16,6 +16,7 @@ import { refundNo } from "@/ui/format";
 import { pendingCounts } from "./counts";
 import { monthlyRevenue, nextEvent, recentActivity, revenueByEvent, salesToday, week } from "./dashboard";
 import { OpsError, actorId, actorNote, b, money, n, ok, s, type Op } from "./kit";
+import { physicalOps } from "./physical";
 
 /* ---------------------------------------------------------------------------
    Every admin screen and action for Nepthic Events, as named operations the portal calls
@@ -29,6 +30,7 @@ const slugify = (v: string) => v.toLowerCase().normalize("NFKD").replace(/[^a-z0
 const fromLocalInput = (v: string) => new Date(`${v.length === 16 ? `${v}:00` : v}+10:00`);
 
 export const ops: Record<string, Op> = {
+  ...physicalOps,
   /* ------------------------------ reads ------------------------------ */
 
   "summary": { level: "view", run: async () => {
@@ -66,7 +68,7 @@ export const ops: Record<string, Op> = {
     const attendees = await db.query.tickets.findMany({
       where: eq(tickets.eventId, e.id), orderBy: desc(tickets.createdAt), limit: 500,
       with: { ticketType: { columns: { name: true, priceCents: true } }, ticketOrder: { columns: { buyerEmail: true } } },
-      columns: { id: true, code: true, holderName: true, status: true, checkedInAt: true },
+      columns: { id: true, code: true, holderName: true, buyerEmail: true, status: true, checkedInAt: true },
     });
     return { event: e, attendees, siteUrl: env.siteUrl };
   } },
@@ -124,10 +126,11 @@ export const ops: Record<string, Op> = {
   /** Events from yesterday onwards, with admitted / issued counts. */
   "checkin.events": { level: "door", run: async () => {
     const since = new Date(Date.now() - 24 * 3600e3);
-    const list = await db.query.events.findMany({ where: and(eq(events.status, "PUBLISHED"), gte(events.startsAt, since)), orderBy: asc(events.startsAt), columns: { id: true, name: true, startsAt: true, venue: true } });
+    const list = await db.query.events.findMany({ where: and(eq(events.status, "PUBLISHED"), gte(events.startsAt, since)), orderBy: asc(events.startsAt), columns: { id: true, name: true, startsAt: true, venue: true, gates: true } });
     const stats = await db.select({
       eventId: tickets.eventId,
-      issued: sql<number>`count(*) filter (where ${tickets.status} in ('VALID','USED','REFUND_REQUESTED'))::int`,
+      // Unsold physical stock isn't "issued" to anyone yet.
+      issued: sql<number>`count(*) filter (where ${tickets.status} in ('VALID','USED','REFUND_REQUESTED') and (${tickets.stage} is null or ${tickets.stage} = 'SOLD'))::int`,
       used: sql<number>`count(*) filter (where ${tickets.status} = 'USED')::int`,
       last: sql<Date | null>`max(${tickets.checkedInAt})`,
     }).from(tickets).groupBy(tickets.eventId);
@@ -136,14 +139,20 @@ export const ops: Record<string, Op> = {
   } },
 
   /** Validate one scan and admit the ticket at most once. */
-  "checkin.scan": { level: "door", run: async (i, a) => checkIn(s(i, "raw"), s(i, "eventId"), actorId(a)) },
+  "checkin.scan": { level: "door", run: async (i, a) => checkIn(s(i, "raw"), s(i, "eventId"), actorId(a), { gate: s(i, "gate"), method: s(i, "method") === "MANUAL" ? "MANUAL" : s(i, "method") === "OFFLINE" ? "OFFLINE" : "CAMERA" }) },
 
   /** Ticket list for one event, so the scanner keeps working if the venue's signal drops. */
   "checkin.tickets": { level: "door", run: async (i) => {
     const e = await db.query.events.findFirst({ where: eq(events.id, s(i, "eventId")), columns: { id: true, name: true } });
     if (!e) throw new OpsError("Event not found.", 404);
-    const rows = await db.query.tickets.findMany({ where: eq(tickets.eventId, e.id), with: { ticketType: { columns: { name: true } } }, columns: { code: true, status: true, holderName: true, checkedInAt: true } });
-    return { event: e, at: new Date().toISOString(), tickets: rows.map((t) => ({ code: t.code, status: t.status, holder: t.holderName, type: t.ticketType.name, checkedInAt: t.checkedInAt })) };
+    // For offline scanning: the QR id lets a device match a QR without signal (it can't create QRs: no signing key).
+    const rows = await db.query.tickets.findMany({ where: eq(tickets.eventId, e.id), with: { ticketType: { columns: { name: true } }, partner: { columns: { name: true, code: true, color: true, status: true } } },
+      columns: { code: true, codeKey: true, qrId: true, status: true, stage: true, source: true, format: true, holderName: true, checkedInAt: true, checkedInGate: true } });
+    return { event: e, at: new Date().toISOString(), tickets: rows.map((t) => ({
+      code: t.code, key: t.codeKey, qr: t.qrId, status: t.status, holder: t.holderName, type: t.ticketType.name, checkedInAt: t.checkedInAt, gate: t.checkedInGate, format: t.format,
+      unsold: !!t.stage && t.stage !== "SOLD" && t.source !== "ONLINE",
+      source: t.partner ? { label: t.partner.name, code: t.partner.code, color: t.partner.color, suspended: t.partner.status === "SUSPENDED" } : { label: t.source === "BOX_OFFICE" ? "Box Office" : "Nepthic Online", code: null, color: t.source === "BOX_OFFICE" ? "#64748B" : "#8B5CF6", suspended: false },
+    })) };
   } },
 
   /* ------------------------ events, refunds, settings ------------------------ */
@@ -218,6 +227,7 @@ export const ops: Record<string, Op> = {
     const approve = s(i, "decision") === "APPROVED";
     const note = s(i, "note");
     if (approve) {
+      if (!r.ticket.ticketOrderId) throw new OpsError("This ticket wasn't bought online, so it can't be refunded here. Refund it where it was sold.", 409);
       const paid = await db.query.payments.findMany({ where: and(eq(payments.ticketOrderId, r.ticket.ticketOrderId), eq(payments.status, "SUCCEEDED"), eq(payments.kind, "TICKET")) });
       if (!paid[0]) throw new OpsError("No completed payment found for this ticket.", 409);
       await refundPayment(paid[0].id, r.amountCents, `${refundNo(r.number)} · ticket ${r.ticket.code}`);

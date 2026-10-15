@@ -7,6 +7,7 @@ import { dateLong, time } from "@/ui/format";
 import { Poster } from "@/ui/Art";
 import { imageUrl } from "@/lib/events";
 import { TicketPicker } from "./TicketPicker";
+import { POST_CUTOFF_DAYS, POST_FEE_CENTS, referralPartner } from "@/core/referral";
 import { SaveButton } from "@/ui/ux/SaveButton";
 import { savedIds } from "@/lib/saved";
 
@@ -22,7 +23,7 @@ export default async function EventPage({ params, searchParams }: { params: Prom
     with: { ticketTypes: { orderBy: asc(ticketTypes.sortOrder) } },
   });
   if (!e) notFound();
-  const [user, settings, saved] = await Promise.all([getUser(), getSettings(), savedIds()]);
+  const [user, settings, saved, ref] = await Promise.all([getUser(), getSettings(), savedIds(), referralPartner()]);
   const past = e.startsAt < new Date();
   const sold = e.ticketTypes.reduce((a, t) => a + t.sold, 0);
 
@@ -71,6 +72,10 @@ export default async function EventPage({ params, searchParams }: { params: Prom
               max={settings.maxTicketsPerOrder}
               refundHours={settings.ticketRefundCutoffHours}
               types={e.ticketTypes.map((t) => ({ id: t.id, name: t.name, priceCents: t.priceCents, left: Math.max(0, t.capacity - t.sold) }))}
+              formats={e.ticketFormats}
+              postAllowed={e.startsAt.getTime() - Date.now() >= POST_CUTOFF_DAYS * 864e5}
+              postFeeCents={POST_FEE_CENTS}
+              referral={ref ? { name: ref.name } : null}
             />
           )}
         </aside>

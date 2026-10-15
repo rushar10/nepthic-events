@@ -43,7 +43,7 @@ export async function templateFor(templateId: string | null | undefined) {
 }
 
 type TicketRow = {
-  code: string; holderName: string; status: TicketData["status"];
+  code: string; qrId: string; holderName: string; status: TicketData["status"];
   ticketType: { name: string; priceCents: number };
   event: { name: string; startsAt: Date; venue: string; city: string; ticketTemplateId: string | null };
   ticketOrder?: { number?: number | null } | null;
@@ -60,6 +60,6 @@ export function ticketData(t: TicketRow): TicketData {
 /** The ticket in its event's design, as SVG. Refunded and void tickets get no QR. */
 export async function renderTicket(t: TicketRow) {
   const dead = t.status === "REFUNDED" || t.status === "VOID";
-  const qr = dead ? null : await qrDataUrl(t.code, 480);
+  const qr = dead ? null : await qrDataUrl(t.qrId, 480);
   return ticketSvg(await templateFor(t.event.ticketTemplateId), ticketData(t), qr);
 }
