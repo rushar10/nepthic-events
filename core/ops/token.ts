@@ -30,7 +30,7 @@ let key: Promise<KeyLike> | null = null;
 export const opsEnabled = () => !!process.env.PORTAL_PUBLIC_KEY;
 
 function publicKey() {
-  key ??= importSPKI((process.env.PORTAL_PUBLIC_KEY ?? "").replace(/\\n/g, "\n"), "EdDSA");
+  key ??= importSPKI((process.env.PORTAL_PUBLIC_KEY ?? "").trim().replace(/^([\'"])([\s\S]*)\1$/, "$2").replace(/\\n/g, "\n"), "EdDSA");
   return key;
 }
 

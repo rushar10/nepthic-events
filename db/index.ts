@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL && process.env.NEXT_PHASE !== "phase-production-bu
   throw new Error("DATABASE_URL is not set. Copy .env.example to .env in this project and fill it in.");
 }
 
-const pool = g.nepthicEventsPool ?? new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+const pool = g.nepthicEventsPool ?? new Pool({ connectionString: process.env.DATABASE_URL?.trim().replace(/^([\'"])([\s\S]*)\1$/, "$2"), max: 10 });
 if (process.env.NODE_ENV !== "production") g.nepthicEventsPool = pool;
 
 export const db: NodePgDatabase<typeof schema> = drizzle(pool, { schema });
