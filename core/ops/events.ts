@@ -3,10 +3,10 @@ import {
   and, asc, db, desc, eq, events, gte, ilike, ne, or, payments, refundRequests, settings, sql, ticketOrders,
   ticketTemplates, ticketTypes, tickets, users, type PaymentKind,
 } from "@/db";
-import { contrast, normalizeTemplate, type TicketFields } from "@/core/ticket-design";
+import { ART_SIZES, contrast, normalizeArt, normalizeTemplate, type ArtKind, type TicketArtwork, type TicketFields } from "@/core/ticket-design";
 import { ensureDefault, listTemplates } from "@/core/ticket-templates";
 import { getSettings } from "@/core/settings";
-import { saveImages } from "@/core/uploads";
+import { publicImage, saveArtwork, saveImages } from "@/core/uploads";
 import { refundPayment } from "@/core/payments";
 import { checkIn, releaseSeats } from "@/core/tickets";
 import { emails } from "@/core/email";
@@ -28,6 +28,34 @@ const fresh = () => revalidatePath("/", "layout");
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const slugify = (v: string) => v.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60);
 const fromLocalInput = (v: string) => new Date(`${v.length === 16 ? `${v}:00` : v}+10:00`);
+
+/* Canva artwork sent with a template: `art` is the editor's JSON (positions, and "new" as the
+   upload id where a file is attached as artEticket / artStub). Existing artwork must be one of
+   this site's public images, so a template can never show a private upload. */
+const ART_FILE: Record<ArtKind, string> = { eticket: "artEticket", stub: "artStub" };
+async function artworkFrom(i: Record<string, unknown>, files: Record<string, File[]>, userId: string | null): Promise<TicketArtwork> {
+  let raw: Record<string, unknown> = {};
+  try { raw = typeof i.art === "string" && i.art ? JSON.parse(i.art) : ((i.art as Record<string, unknown>) ?? {}); } catch { throw new OpsError("The artwork settings couldn't be read. Reload the page and try again."); }
+  const out: Record<ArtKind, unknown> = { eticket: null, stub: null };
+  for (const kind of ["eticket", "stub"] as ArtKind[]) {
+    const side = raw[kind] as Record<string, unknown> | null | undefined;
+    if (!side) continue;
+    const file = files[ART_FILE[kind]]?.[0];
+    if (file && file.size > 0) {
+      try {
+        const up = await saveArtwork(file, userId);
+        out[kind] = { ...side, uploadId: up.id, w: up.w, h: up.h };
+      } catch (e) { throw new OpsError(`${kind === "eticket" ? "E-ticket" : "Printed ticket"} artwork: ${(e as Error).message}`); }
+    } else if (typeof side.uploadId === "string" && side.uploadId !== "new") {
+      const u = await publicImage(side.uploadId);
+      if (!u) throw new OpsError("That artwork is no longer available. Upload it again.");
+      out[kind] = side;
+    } else {
+      throw new OpsError(`Upload your Canva design for the ${kind === "eticket" ? "e-ticket" : "printed ticket"} (${ART_SIZES[kind].label}), or switch it back to "Generate".`);
+    }
+  }
+  return normalizeArt(out);
+}
 
 export const ops: Record<string, Op> = {
   ...physicalOps,
@@ -261,14 +289,15 @@ export const ops: Record<string, Op> = {
     };
   } },
 
-  "template.save": { level: "manage", run: async (i, a) => {
+  "template.save": { level: "manage", run: async (i, a, files) => {
     const id = s(i, "id");
     const fin = (i.fields ?? {}) as Record<string, unknown>;
     const fields = Object.fromEntries(FIELD_KEYS.map((k) => [k, b(fin, k)])) as TicketFields;
+    const art = await artworkFrom(i, files, actorId(a));
     const design = normalizeTemplate({
       name: s(i, "name"), layout: s(i, "layout") as never, pattern: s(i, "pattern") as never,
       bg: s(i, "bg"), bg2: s(i, "bg2"), ink: s(i, "ink"), accent: s(i, "accent"),
-      brand: s(i, "brand"), headline: s(i, "headline"), finePrint: s(i, "finePrint"), fields,
+      brand: s(i, "brand"), headline: s(i, "headline"), finePrint: s(i, "finePrint"), fields, art,
     });
     if (!s(i, "name")) throw new OpsError("Name the template.");
     const worst = Math.min(contrast(design.ink, design.bg), contrast(design.ink, design.bg2));
@@ -279,7 +308,7 @@ export const ops: Record<string, Op> = {
     }
     const saved = id ? id : (await db.insert(ticketTemplates).values({ name: design.name, design }).returning({ id: ticketTemplates.id }))[0].id;
     if (b(i, "makeDefault")) await setDefaultTemplate(saved);
-    await audit(actorId(a), id ? "ticket_template.updated" : "ticket_template.created", "TicketTemplate", saved, { ...actorNote(a), name: design.name, layout: design.layout });
+    await audit(actorId(a), id ? "ticket_template.updated" : "ticket_template.created", "TicketTemplate", saved, { ...actorNote(a), name: design.name, layout: design.layout, eticketArtwork: design.art.eticket?.uploadId ?? null, stubArtwork: design.art.stub?.uploadId ?? null });
     fresh();
     return ok(id ? `${design.name} saved. Tickets using it update straight away.` : `${design.name} created.`, { id: saved });
   } },

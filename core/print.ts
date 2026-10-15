@@ -4,6 +4,7 @@ import SVGtoPDF from "svg-to-pdfkit";
 import QRCode from "qrcode";
 import sharp from "sharp";
 import { db, eq, inArray, tickets, uploads } from "@/db";
+import { publicImage } from "./uploads";
 import { env } from "./env";
 import { ticketPayload } from "./ticket-codes";
 import { printTicketSvg, PRINT_SIZES, type PrintData, type TicketTemplate } from "./ticket-design";
@@ -83,17 +84,31 @@ export function printData(r: Row): PrintData {
   };
 }
 
-/** SVGs for the given tickets in one print format. */
+/** Stub artwork at print resolution, with its bleed: 414 × 162 pt (the 396 × 144 pt ticket plus
+    9 pt on every side) at 300 dpi. Artwork made without bleed is scaled up slightly to fill it. */
+const artBuffers = new Map<string, Buffer | null>();
+async function stubArt(uploadId: string) {
+  if (!artBuffers.has(uploadId)) {
+    const u = await publicImage(uploadId);
+    if (artBuffers.size > 10) artBuffers.delete(artBuffers.keys().next().value!);
+    artBuffers.set(uploadId, u ? await sharp(u.data).resize(1725, 675, { fit: "cover" }).jpeg({ quality: 92, chromaSubsampling: "4:4:4" }).toBuffer() : null);
+  }
+  return artBuffers.get(uploadId)!;
+}
+
+/** SVGs for the given tickets in one print format. `art` is the stub artwork (drawn under the SVG). */
 export async function ticketSvgs(rows: Row[], format: "stub" | "thermal") {
   const templates = new Map<string, TicketTemplate>();
   const banners = new Map<string, string | null>();
-  const out: { svg: string; bg: string }[] = [];
+  const out: { svg: string; bg: string; art: Buffer | null }[] = [];
   for (const r of rows) {
     const key = r.event.ticketTemplateId ?? "";
     if (!templates.has(key)) templates.set(key, await templateFor(r.event.ticketTemplateId));
-    if (!banners.has(r.event.id)) banners.set(r.event.id, format === "stub" ? await bannerFor(r.event.coverUploadId) : null);
     const t = templates.get(key)!;
-    out.push({ svg: printTicketSvg(t, printData(r), qrMatrix(r.qrId), { format, seed: r.event.id, banner: banners.get(r.event.id) }), bg: t.bg });
+    const art = format === "stub" && t.art.stub ? await stubArt(t.art.stub.uploadId) : null;
+    if (!banners.has(r.event.id)) banners.set(r.event.id, format === "stub" && !art ? await bannerFor(r.event.coverUploadId) : null);
+    const svg = printTicketSvg(t, printData(r), qrMatrix(r.qrId), { format, seed: r.event.id, banner: banners.get(r.event.id), art: art ? () => "" : undefined, artLayer: false });
+    out.push({ svg, bg: art ? "#FFFFFF" : t.bg, art });
   }
   return out;
 }
@@ -123,10 +138,20 @@ export async function ticketsPdf(rows: Row[], layout: PdfLayout, title: string):
   const draw = (svg: string, x: number, y: number) =>
     SVGtoPDF(doc, svg, x, y, { width: w, height: h, assumePt: true, fontCallback: (family: string, bold: boolean) => fontFor(family, bold) });
 
+  // Artwork runs into the bleed on single stubs; on A4 sheets it is cut at the trim line.
+  const art = (it: { art: Buffer | null }, x: number, y: number, bleed: boolean) => {
+    if (!it.art) return;
+    doc.save();
+    if (!bleed) doc.rect(x, y, w, h).clip();
+    doc.image(it.art, x - BLEED, y - BLEED, { width: w + 2 * BLEED, height: h + 2 * BLEED });
+    doc.restore();
+  };
+
   if (layout === "stub") {
     for (const it of items) {
       doc.addPage({ size: firstSize, margin: 0 });
       doc.rect(M - BLEED, M - BLEED, w + 2 * BLEED, h + 2 * BLEED).fill(it.bg); // bleed in the background colour
+      art(it, M, M, true);
       draw(it.svg, M, M);
       cropMarks(doc, M, M, w, h, BLEED + 2);
     }
@@ -138,6 +163,7 @@ export async function ticketsPdf(rows: Row[], layout: PdfLayout, title: string):
         doc.font("JetBrains Mono").fontSize(6).fillColor("#666666").text(`${title} · sheet ${Math.floor(i / PER) + 1} of ${Math.ceil(items.length / PER)}`, 20, 10, { lineBreak: false });
       }
       const y = y0 + (i % PER) * (h + GAP);
+      art(it, x0, y, false);
       draw(it.svg, x0, y);
       cropMarks(doc, x0, y, w, h, 3, 8);
     });

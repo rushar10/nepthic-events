@@ -48,3 +48,34 @@ export async function serveUpload(id: string) {
 }
 
 export const uploadUrl = (base: string, id: string) => `${base}/api/uploads/${id}`;
+
+const ART_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ART_MAX_BYTES = 12 * 1024 * 1024;
+
+/** Ticket artwork exported from Canva (or any design tool). Kept sharp enough to print at
+    300 dpi: up to 3000 px on the long side, flattened onto white, stored as a high-quality JPEG
+    with metadata stripped. Public, because it is part of every ticket that uses it. */
+export async function saveArtwork(file: File, userId: string | null) {
+  if (!ART_TYPES.includes(file.type)) throw new Error("Export your Canva design as PNG or JPG (not PDF or SVG), then upload that file.");
+  if (file.size > ART_MAX_BYTES) throw new Error("That image is larger than 12 MB. Export it as JPG instead of PNG.");
+  let img;
+  try {
+    img = sharp(Buffer.from(await file.arrayBuffer()), { limitInputPixels: 60_000_000 }).rotate();
+    const m = await img.metadata();
+    if (!m.width || !m.height) throw new Error("bad");
+  } catch { throw new Error("That file isn't an image we can read. Export it from Canva again as PNG or JPG."); }
+  const { data, info } = await img
+    .resize({ width: 3000, height: 3000, fit: "inside", withoutEnlargement: true })
+    .flatten({ background: "#FFFFFF" })
+    .jpeg({ quality: 90, chromaSubsampling: "4:4:4", mozjpeg: true })
+    .toBuffer({ resolveWithObject: true });
+  if (info.width < 300 || info.height < 120) throw new Error("That image is too small to print. Export it from Canva at the size shown.");
+  const [u] = await db.insert(uploads).values({ userId, mime: "image/jpeg", size: data.length, data, isPublic: true }).returning({ id: uploads.id });
+  return { id: u.id, w: info.width, h: info.height };
+}
+
+/** The upload's bytes, if it is a public image (artwork must never expose private uploads). */
+export async function publicImage(id: string) {
+  const u = await db.query.uploads.findFirst({ where: eq(uploads.id, id) });
+  return u && u.isPublic && u.mime.startsWith("image/") ? u : null;
+}

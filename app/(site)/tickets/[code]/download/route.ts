@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
   const code = decodeURIComponent((await params).code);
   const t = user ? await db.query.tickets.findFirst({ where: eq(tickets.code, code), with: { ticketOrder: true, ticketType: true, event: true } }) : null;
   if (!user || !t || t.ticketOrder?.userId !== user.id) return new Response("Not found", { status: 404 });
-  const svg = await renderTicket(t);
+  const svg = await renderTicket(t, { embed: true });
   const png = await sharp(Buffer.from(svg), { density: 192 }).png().toBuffer();
   const name = `${t.event.slug}-${t.code}.png`.replace(/[^a-zA-Z0-9._-]/g, "");
   return new Response(new Uint8Array(png), {

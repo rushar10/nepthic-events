@@ -1,6 +1,7 @@
 import { asc, db, eq, ticketTemplates, type Tx } from "@/db";
 import { DEFAULT_TEMPLATE, normalizeTemplate, ticketSvg, type TicketData, type TicketTemplate } from "./ticket-design";
 import { qrDataUrl } from "./tickets";
+import { publicImage } from "./uploads";
 import { aud, time } from "@/ui/format";
 
 /** "Sat 21 Nov 2026": short enough for every layout. */
@@ -44,7 +45,7 @@ export async function templateFor(templateId: string | null | undefined) {
 
 type TicketRow = {
   code: string; qrId: string; holderName: string; status: TicketData["status"];
-  ticketType: { name: string; priceCents: number };
+  ticketType: { name: string; priceCents: number; zone?: string | null };
   event: { name: string; startsAt: Date; venue: string; city: string; ticketTemplateId: string | null };
   ticketOrder?: { number?: number | null } | null;
 };
@@ -54,12 +55,29 @@ export function ticketData(t: TicketRow): TicketData {
     eventName: t.event.name, dateText: ticketDate(t.event.startsAt), doorsText: time(t.event.startsAt),
     venue: t.event.venue, city: t.event.city, typeName: t.ticketType.name, priceText: aud(t.ticketType.priceCents),
     holder: t.holderName, code: t.code, orderText: t.ticketOrder?.number ? `TO-${t.ticketOrder.number}` : "", status: t.status,
+    zone: t.ticketType.zone || undefined,
   };
 }
 
-/** The ticket in its event's design, as SVG. Refunded and void tickets get no QR. */
-export async function renderTicket(t: TicketRow) {
+/** Artwork as a self-contained data: URL (for PNG/PDF rendering), cached per upload. */
+const artCache = new Map<string, string | null>();
+export async function artDataUrl(uploadId: string) {
+  if (!artCache.has(uploadId)) {
+    const u = await publicImage(uploadId);
+    if (artCache.size > 20) artCache.delete(artCache.keys().next().value!);
+    artCache.set(uploadId, u ? `data:${u.mime};base64,${Buffer.from(u.data).toString("base64")}` : null);
+  }
+  return artCache.get(uploadId)!;
+}
+
+/** The ticket in its event's design, as SVG. Refunded and void tickets get no QR.
+    `embed`: put the artwork inside the SVG (needed to turn it into a PNG); otherwise the page
+    links to the image, which the browser caches. */
+export async function renderTicket(t: TicketRow, opts: { embed?: boolean } = {}) {
   const dead = t.status === "REFUNDED" || t.status === "VOID";
   const qr = dead ? null : await qrDataUrl(t.qrId, 480);
-  return ticketSvg(await templateFor(t.event.ticketTemplateId), ticketData(t), qr);
+  const tpl = await templateFor(t.event.ticketTemplateId);
+  const art = tpl.art.eticket;
+  const href = !art ? null : opts.embed ? await artDataUrl(art.uploadId) : (await publicImage(art.uploadId)) ? `/api/uploads/${art.uploadId}` : null;
+  return ticketSvg(tpl, ticketData(t), qr, { art: () => href });
 }

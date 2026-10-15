@@ -21,10 +21,57 @@ export type TicketTemplate = {
   headline: string;
   fields: TicketFields;
   finePrint: string;
+  /** Artwork designed elsewhere (Canva) for the e-ticket and/or the printed stub. A side left
+      null is generated from the settings above, so the built-in generator stays available. */
+  art: TicketArtwork;
 };
+
+/* ---------------------------------------------------------------------------
+   Artwork (Canva) tickets. The artwork is a flat image; the system lays the live details on top:
+   the QR (always on a white panel with a quiet zone, so it scans) and any text item the
+   template switches on, each at a position the admin drags into place in the editor.
+   Positions are fractions of the artwork (0–1), so they survive re-exports at other sizes.
+--------------------------------------------------------------------------- */
+export type ArtFont = "sans" | "mono" | "display";
+export type ArtAlign = "start" | "middle" | "end";
+export type ArtText = { on: boolean; x: number; y: number; size: number; color: string; align: ArtAlign; font: ArtFont };
+export type ArtTextKey = "code" | "holder" | "type" | "zone" | "event" | "date" | "venue" | "serial" | "partner";
+export type ArtKind = "eticket" | "stub";
+export type ArtSide = {
+  uploadId: string;
+  /** Pixel size of the uploaded image (its shape sets the e-ticket's shape). */
+  w: number; h: number;
+  /** Top-left corner as fractions of the width/height; size as a fraction of the shorter side. */
+  qr: { x: number; y: number; size: number };
+  text: Record<ArtTextKey, ArtText>;
+  /** Printed only: a line of microtext along the bottom edge (anti-copy). */
+  microtext?: boolean;
+};
+export type TicketArtwork = { eticket: ArtSide | null; stub: ArtSide | null };
+export const ART_TEXT: Record<ArtKind, { key: ArtTextKey; label: string }[]> = {
+  eticket: [
+    { key: "code", label: "Ticket code" }, { key: "holder", label: "Name" }, { key: "type", label: "Ticket type" }, { key: "zone", label: "Zone / seat" },
+    { key: "event", label: "Event name" }, { key: "date", label: "Date and doors" }, { key: "venue", label: "Venue" },
+  ],
+  stub: [
+    { key: "code", label: "Ticket code" }, { key: "serial", label: "Serial number" }, { key: "partner", label: "Sold by (partner)" }, { key: "holder", label: "Name" },
+    { key: "type", label: "Ticket type" }, { key: "zone", label: "Zone / seat" }, { key: "event", label: "Event name" }, { key: "date", label: "Date and doors" }, { key: "venue", label: "Venue" },
+  ],
+};
+/** Sizes to design at in Canva. The printed one includes 0.125" bleed on every side. */
+export const ART_SIZES: Record<ArtKind, { w: number; h: number; label: string; note: string }> = {
+  eticket: { w: 1080, h: 1920, label: "1080 × 1920 px", note: "Portrait phone size. Any shape works (landscape too); the e-ticket takes your design's shape." },
+  stub: { w: 1725, h: 675, label: '5.75 × 2.25 in (1725 × 675 px)', note: 'A 5.5 × 2 in ticket plus 0.125 in bleed on each side, at 300 dpi. Keep text 0.25 in inside the edges. Export as PNG or JPG, not PDF.' },
+};
+/** The smallest QR allowed, as a fraction of the shorter side: big enough for phones at the door
+    (e-ticket) and at least 0.75 in printed (54 pt of the 144 pt stub). */
+export const ART_QR_MIN: Record<ArtKind, number> = { eticket: 0.3, stub: 0.375 };
+export const EMPTY_ART: TicketArtwork = { eticket: null, stub: null };
+
 export type TicketData = {
   eventName: string; dateText: string; doorsText: string; venue: string; city: string;
   typeName: string; priceText: string; holder: string; code: string; orderText: string;
+  zone?: string;
   status?: "VALID" | "USED" | "REFUND_REQUESTED" | "REFUNDED" | "VOID";
 };
 
@@ -45,6 +92,7 @@ export const DEFAULT_TEMPLATE: TicketTemplate = {
   brand: "NEPTHIC EVENTS", headline: "",
   fields: { date: true, doors: true, venue: true, type: true, price: false, holder: true, order: false },
   finePrint: "One entry per ticket. Each code admits one person, once. Bring photo ID. No re-entry.",
+  art: EMPTY_ART,
 };
 
 /** Starting points in the template editor. */
@@ -78,8 +126,131 @@ export function normalizeTemplate(t: Partial<TicketTemplate> & { fields?: Partia
     headline: String(t.headline ?? "").trim().slice(0, 80),
     fields: Object.fromEntries(Object.keys(d.fields).map((k) => [k, t.fields?.[k as keyof TicketFields] ?? d.fields[k as keyof TicketFields]])) as TicketFields,
     finePrint: String(t.finePrint ?? d.finePrint).trim().slice(0, 300),
+    art: normalizeArt(t.art),
   };
 }
+
+const num = (v: unknown, lo: number, hi: number, dflt: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Where things go on a fresh artwork, before the admin moves them. */
+export function defaultArtSide(kind: ArtKind, uploadId: string, w: number, h: number): ArtSide {
+  const W = kind === "stub" ? 396 : 1000, H = kind === "stub" ? 144 : (1000 * h) / w;
+  const t = (on: boolean, x: number, y: number, size: number, align: ArtAlign = "middle", font: ArtFont = "sans"): ArtText => ({ on, x, y, size, color: "#FFFFFF", align, font });
+  if (kind === "stub") {
+    const size = 0.62, qrW = (size * 144) / W; // QR on the right-hand stub
+    const qx = 1 - 14 / W - qrW, cx = qx + qrW / 2;
+    return {
+      uploadId, w, h, qr: { x: qx, y: 0.07, size }, microtext: true,
+      text: {
+        code: t(true, cx, 0.8, 0.055, "middle", "mono"), serial: t(true, cx, 0.88, 0.04, "middle", "mono"), partner: t(true, cx, 0.95, 0.035),
+        holder: t(false, 0.05, 0.7, 0.06, "start"), type: t(false, 0.05, 0.78, 0.055, "start"), zone: t(false, 0.05, 0.86, 0.055, "start"),
+        event: t(false, 0.05, 0.2, 0.1, "start", "display"), date: t(false, 0.05, 0.32, 0.06, "start"), venue: t(false, 0.05, 0.4, 0.055, "start"),
+      },
+    };
+  }
+  const min = Math.min(W, H), size = 0.5, qw = (size * min) / W, qh = (size * min) / H;
+  const qx = (1 - qw) / 2, qy = Math.max(0.02, 1 - qh - 0.14);
+  return {
+    uploadId, w, h, qr: { x: qx, y: qy, size },
+    text: {
+      code: t(true, 0.5, Math.min(0.97, qy + qh + 0.045), 0.026, "middle", "mono"), holder: t(true, 0.5, Math.max(0.03, qy - 0.03), 0.026),
+      type: t(false, 0.5, Math.min(0.99, qy + qh + 0.085), 0.022), zone: t(false, 0.5, Math.max(0.03, qy - 0.07), 0.022),
+      event: t(false, 0.5, 0.1, 0.045, "middle", "display"), date: t(false, 0.5, 0.16, 0.024), venue: t(false, 0.5, 0.2, 0.022),
+      serial: t(false, 0.5, 0.98, 0.02, "middle", "mono"), partner: t(false, 0.5, 0.99, 0.02),
+    },
+  };
+}
+
+function normalizeSide(kind: ArtKind, v: unknown): ArtSide | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Partial<ArtSide> & { text?: Partial<Record<ArtTextKey, Partial<ArtText>>> };
+  if (typeof o.uploadId !== "string" || !UUID.test(o.uploadId)) return null;
+  const w = Math.round(num(o.w, 40, 10000, 0)), h = Math.round(num(o.h, 40, 10000, 0));
+  if (!w || !h) return null;
+  const base = defaultArtSide(kind, o.uploadId, w, h);
+  const W = kind === "stub" ? 396 : 1000, H = kind === "stub" ? 144 : (1000 * h) / w, min = Math.min(W, H);
+  const size = num(o.qr?.size, ART_QR_MIN[kind], 0.95, base.qr.size);
+  const qw = (size * min) / W, qh = (size * min) / H;
+  const qr = { size, x: num(o.qr?.x, 0, 1 - qw, base.qr.x), y: num(o.qr?.y, 0, 1 - qh, base.qr.y) };
+  const text = {} as Record<ArtTextKey, ArtText>;
+  for (const k of Object.keys(base.text) as ArtTextKey[]) {
+    const src: Partial<ArtText> = o.text?.[k] ?? {}, b = base.text[k];
+    text[k] = {
+      on: typeof src.on === "boolean" ? src.on : b.on,
+      x: num(src.x, 0, 1, b.x), y: num(src.y, 0, 1, b.y), size: num(src.size, 0.012, 0.25, b.size),
+      color: colour(String(src.color ?? ""), b.color),
+      align: (["start", "middle", "end"] as const).includes(src.align as ArtAlign) ? (src.align as ArtAlign) : b.align,
+      font: (["sans", "mono", "display"] as const).includes(src.font as ArtFont) ? (src.font as ArtFont) : b.font,
+    };
+  }
+  text.code.on = true; // the readable code is always printed: door staff type it when a QR won't scan
+  return { uploadId: o.uploadId, w, h, qr, text, ...(kind === "stub" ? { microtext: o.microtext !== false } : {}) };
+}
+
+/** Rough box of a text item (fractions of the artwork), for the editor's overlap warnings. */
+export function artTextBox(side: ArtSide, kind: ArtKind, key: ArtTextKey, value: string) {
+  const W = kind === "stub" ? 396 : 1000, H = kind === "stub" ? 144 : (1000 * side.h) / side.w;
+  const it = side.text[key];
+  const wFrac = (Math.max(1, value.length) * it.size * H * (it.font === "display" ? 0.78 : it.font === "mono" ? 0.62 : 0.55)) / W;
+  const x0 = it.align === "start" ? it.x : it.align === "end" ? it.x - wFrac : it.x - wFrac / 2;
+  return { x: x0, y: it.y - it.size * 0.6, w: wFrac, h: it.size * 1.2 };
+}
+
+/** Text items that sit on the QR panel (they are drawn under it, so they'd be hidden). */
+export function artOverlaps(side: ArtSide, kind: ArtKind, values: Partial<Record<ArtTextKey, string>>): ArtTextKey[] {
+  const W = kind === "stub" ? 396 : 1000, H = kind === "stub" ? 144 : (1000 * side.h) / side.w, min = Math.min(W, H);
+  const q = { x: side.qr.x, y: side.qr.y, w: (side.qr.size * min) / W, h: (side.qr.size * min) / H };
+  return (Object.keys(side.text) as ArtTextKey[]).filter((k) => {
+    if (!side.text[k].on || !values[k]) return false;
+    const b = artTextBox(side, kind, k, values[k]!);
+    return b.x < q.x + q.w && b.x + b.w > q.x && b.y < q.y + q.h && b.y + b.h > q.y;
+  });
+}
+
+/** Sample values for the editor, per item. */
+export function artSampleValues(d: TicketData & { serial?: string; partnerLabel?: string }): Record<ArtTextKey, string> {
+  const keys: ArtTextKey[] = ["code", "holder", "type", "zone", "event", "date", "venue", "serial", "partner"];
+  return Object.fromEntries(keys.map((k) => [k, artValue(k, d)])) as Record<ArtTextKey, string>;
+}
+
+export function normalizeArt(v: unknown): TicketArtwork {
+  const o = (v && typeof v === "object" ? v : {}) as Partial<TicketArtwork>;
+  return { eticket: normalizeSide("eticket", o.eticket), stub: normalizeSide("stub", o.stub) };
+}
+
+/** The text an artwork item shows for this ticket ("" hides it). */
+function artValue(k: ArtTextKey, d: TicketData & { serial?: string; partnerLabel?: string }) {
+  switch (k) {
+    case "code": return d.code;
+    case "holder": return d.holder;
+    case "type": return d.typeName;
+    case "zone": return d.zone ?? "";
+    case "event": return d.eventName;
+    case "date": return [d.dateText, d.doorsText && `Doors ${d.doorsText}`].filter(Boolean).join(" · ");
+    case "venue": return [d.venue, d.city].filter(Boolean).join(", ");
+    case "serial": return d.serial ? `No. ${d.serial}` : "";
+    case "partner": return d.partnerLabel ?? "";
+  }
+}
+
+const ART_FONT: Record<ArtFont, string> = {
+  sans: `font-family="Instrument Sans,system-ui,sans-serif" font-weight="600"`,
+  mono: `font-family="JetBrains Mono,ui-monospace,monospace" font-weight="600"`,
+  display: `font-family="Unbounded,Arial Black,sans-serif" font-weight="800"`,
+};
+
+/** The overlay items (text) for an artwork side, in a W × H coordinate space. */
+function artTexts(side: ArtSide, kind: ArtKind, d: TicketData & { serial?: string; partnerLabel?: string }, W: number, H: number) {
+  return ART_TEXT[kind].map(({ key }) => {
+    const it = side.text[key];
+    const v = artValue(key, d);
+    if (!it.on || !v) return "";
+    const fs = +(it.size * H).toFixed(2);
+    return `<text x="${(it.x * W).toFixed(2)}" y="${(it.y * H).toFixed(2)}" text-anchor="${it.align}" dominant-baseline="middle" ${ART_FONT[it.font]} font-size="${fs}" fill="${it.color}">${esc(cutText(v, 60))}</text>`;
+  }).join("");
+}
+const cutText = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** WCAG contrast ratio between two hex colours (1–21). The editor warns under 4.5. */
 export function contrast(a: string, b: string) {
@@ -172,8 +343,12 @@ function stamp(d: TicketData, w: number, h: number) {
 }
 
 /** The ticket as an SVG string. `qr` is a data: URL of the ticket's QR (null hides it). */
-export function ticketSvg(template: TicketTemplate, d: TicketData, qr: string | null, opts: { title?: string } = {}) {
+export function ticketSvg(template: TicketTemplate, d: TicketData, qr: string | null, opts: { title?: string; art?: ArtResolver } = {}) {
   const t = normalizeTemplate(template);
+  if (t.art.eticket && opts.art) {
+    const href = opts.art(t.art.eticket.uploadId);
+    if (href) return artTicketSvg(t.art.eticket, d, qr, href, opts.title ?? `Ticket ${d.code} for ${d.eventName}`);
+  }
   const L = LAYOUTS.find((l) => l.key === t.layout)!;
   const { w, h } = L;
   const id = `t${Math.abs([...d.code + t.layout].reduce((n, c) => (n * 33 + c.charCodeAt(0)) | 0, 5381))}`;
@@ -231,6 +406,23 @@ export function ticketSvg(template: TicketTemplate, d: TicketData, qr: string | 
     + `<g mask="url(#${id}m)"><rect width="${w}" height="${h}" fill="url(#${id}g)"/>${t.layout === "minimal" ? "" : pattern(t.pattern, w, h, t.accent)}${inner}${stamp(d, w, h)}</g></svg>`;
 }
 
+/** Turns an artwork upload id into an image address (a URL, or a data: URL when the SVG is
+    rendered to PNG/PDF and must be self-contained). Returning null falls back to the generator. */
+export type ArtResolver = (uploadId: string) => string | null;
+
+/** An e-ticket on Canva artwork: the image, then the QR panel and the switched-on details. */
+export function artTicketSvg(side: ArtSide, d: TicketData, qr: string | null, href: string, title = `Ticket ${d.code}`) {
+  const W = 1000, H = Math.round((1000 * side.h) / side.w);
+  const min = Math.min(W, H), size = side.qr.size * min;
+  const id = `a${Math.abs([...d.code + side.uploadId].reduce((n, c) => (n * 33 + c.charCodeAt(0)) | 0, 5381))}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(title)}">`
+    + `<title>${esc(title)}</title><defs><clipPath id="${id}c"><rect width="${W}" height="${H}" rx="24"/></clipPath></defs>`
+    + `<g clip-path="url(#${id}c)"><image href="${esc(href)}" xlink:href="${esc(href)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/>`
+    + artTexts(side, "eticket", d, W, H) // under the QR: a detail dragged onto it can never hide modules
+    + qrBlock(qr, Math.round(side.qr.x * W), Math.round(side.qr.y * H), Math.round(size), d)
+    + stamp(d, W, H) + `</g></svg>`;
+}
+
 /* ---------------------------------------------------------------------------
    Printed tickets. Same template (colours, wording, fields), laid out for paper:
      stub     2" × 5.5" (396 × 144 pt), full colour, perforated stub with the QR
@@ -242,7 +434,12 @@ export function ticketSvg(template: TicketTemplate, d: TicketData, qr: string | 
 
 export type PrintFormat = "stub" | "thermal";
 export type PrintData = TicketData & { zone?: string; serial?: string; partnerLabel?: string };
-export type PrintOptions = { format: PrintFormat; seed: string; banner?: string | null; hologram?: boolean; microtext?: boolean; pattern?: boolean };
+export type PrintOptions = {
+  format: PrintFormat; seed: string; banner?: string | null; hologram?: boolean; microtext?: boolean; pattern?: boolean;
+  /** Artwork for the stub. With `artLayer: false` the image is left out (the PDF draws it under
+      the SVG itself, so it can run into the bleed); previews leave it in. */
+  art?: ArtResolver; artLayer?: boolean;
+};
 export const PRINT_SIZES: Record<PrintFormat, { w: number; h: number; label: string }> = {
   stub: { w: 396, h: 144, label: 'Ticket stub 2" × 5.5"' },
   thermal: { w: 226.77, h: 410, label: "Thermal roll 80 mm" },
@@ -336,6 +533,19 @@ export function printTicketSvg(template: TicketTemplate, d: PrintData, qr: boole
     if (fine) s += `<text x="${w / 2}" y="${y + 4}" text-anchor="middle" ${SANS} font-size="5.5" fill="#000">${wrap(fine, 62, 3).map((l, i) => `<tspan x="${w / 2}" dy="${i ? 7 : 0}">${esc(l)}</tspan>`).join("")}</text>`;
     if (o.microtext !== false) s += `<text x="${w / 2}" y="${h - 8}" text-anchor="middle" ${MONO} font-size="2" fill="#000">${esc(micro.repeat(4).slice(0, 150))}</text>`;
     return s + "</svg>";
+  }
+
+  if (t.art.stub && o.art) {
+    const side = t.art.stub, href = o.artLayer === false ? "" : o.art(side.uploadId);
+    if (href !== null) {
+      const size = side.qr.size * h;
+      // The artwork includes 9 pt bleed on each side, so the trimmed ticket shows its middle (as printed)
+      let a = head + (href ? `<image href="${esc(href)}" xlink:href="${esc(href)}" x="-9" y="-9" width="${w + 18}" height="${h + 18}" preserveAspectRatio="xMidYMid slice"/>` : "")
+        + artTexts(side, "stub", d, w, h)
+        + qrVector(qr, +(side.qr.x * w).toFixed(2), +(side.qr.y * h).toFixed(2), +size.toFixed(2));
+      if (side.microtext !== false && o.microtext !== false) a += `<text x="6" y="${h - 1.6}" ${MONO} font-size="1.6" fill="#000000" opacity="0.55">${esc(micro.repeat(6).slice(0, 300))}</text>`;
+      return a + "</svg>";
+    }
   }
 
   // Stub: 396 × 144 pt. Main panel on the left, perforated stub with the QR on the right.
